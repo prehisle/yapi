@@ -52,10 +52,10 @@ cp .env.example .env.local
 - `set_headers` / `add_headers` / `remove_headers`：统一改写或剔除请求头。
 - `set_authorization`：直接注入 `Authorization` 头，避免在客户端分发密钥。
 - `rewrite_path_regex`：基于正则重写请求路径。
-- `override_json`：对 JSON 请求体指定字段赋值，支持点号表示的多级嵌套键（仅对象类型）。
-- `remove_json`：从 JSON 请求体移除指定字段。
+- `override_json`：对 JSON 请求体指定字段赋值，支持点号与 `[]` 数组索引（如 `messages[1].role`），自动补齐缺失节点。
+- `remove_json`：从 JSON 请求体移除指定字段或数组元素。
 
-> JSON 改写仅对对象类型请求体生效，解析失败时会在请求头附加 `X-YAPI-Body-Rewrite-Error` 便于排查。
+> JSON 改写仅在 `Content-Type` 为 `application/json` 时生效，发生错误会在请求头附加 `X-YAPI-Body-Rewrite-Error` 并输出结构化日志（`slog`），便于排查。
 
 ## 开发规范
 

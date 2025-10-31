@@ -96,10 +96,16 @@ func validateActions(a Actions) error {
 		if strings.TrimSpace(key) == "" {
 			return fmt.Errorf("%w: override_json key must not be empty", ErrInvalidRule)
 		}
+		if _, err := ParseJSONPath(key); err != nil {
+			return fmt.Errorf("%w: override_json path %q invalid: %v", ErrInvalidRule, key, err)
+		}
 	}
 	for i, key := range a.RemoveJSON {
 		if strings.TrimSpace(key) == "" {
 			return fmt.Errorf("%w: remove_json[%d] must not be empty", ErrInvalidRule, i)
+		}
+		if _, err := ParseJSONPath(key); err != nil {
+			return fmt.Errorf("%w: remove_json path %q invalid: %v", ErrInvalidRule, key, err)
 		}
 	}
 	return nil

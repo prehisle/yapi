@@ -3,9 +3,10 @@ package proxy
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/sjson"
 
 	"github.com/prehisle/yapi/pkg/rules"
 )
@@ -27,6 +29,7 @@ type Handler struct {
 	service       rules.Service
 	defaultTarget *url.URL
 	transport     http.RoundTripper
+	logger        *slog.Logger
 }
 
 // Option 定义 Handler 可配参数。
@@ -46,6 +49,13 @@ func WithTransport(rt http.RoundTripper) Option {
 	}
 }
 
+// WithLogger 设置结构化日志记录器。
+func WithLogger(logger *slog.Logger) Option {
+	return func(h *Handler) {
+		h.logger = logger
+	}
+}
+
 // NewHandler 创建 Proxy Handler。
 func NewHandler(service rules.Service, opts ...Option) *Handler {
 	h := &Handler{
@@ -59,6 +69,9 @@ func NewHandler(service rules.Service, opts ...Option) *Handler {
 	}
 	for _, opt := range opts {
 		opt(h)
+	}
+	if h.logger == nil {
+		h.logger = slog.Default()
 	}
 	return h
 }
@@ -74,6 +87,19 @@ func (h *Handler) handle(c *gin.Context) {
 		status := http.StatusBadGateway
 		if errors.Is(err, ErrNoMatchingRule) {
 			status = http.StatusNotFound
+			if h.logger != nil {
+				h.logger.Info("no matching rule",
+					"method", c.Request.Method,
+					"path", c.Request.URL.Path,
+				)
+			}
+		}
+		if h.logger != nil && !errors.Is(err, ErrNoMatchingRule) {
+			h.logger.Error("match rule failed",
+				"error", err,
+				"method", c.Request.Method,
+				"path", c.Request.URL.Path,
+			)
 		}
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
@@ -81,6 +107,13 @@ func (h *Handler) handle(c *gin.Context) {
 
 	targetURL, err := h.resolveTarget(c, rule)
 	if err != nil {
+		if h.logger != nil {
+			h.logger.Error("resolve target failed",
+				"error", err,
+				"rule_id", rule.ID,
+				"path", c.Request.URL.Path,
+			)
+		}
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
@@ -90,7 +123,17 @@ func (h *Handler) handle(c *gin.Context) {
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
-		applyRuleActions(req, rule.Actions)
+		if err := h.applyRuleActions(req, rule); err != nil {
+			req.Header.Add("X-YAPI-Body-Rewrite-Error", err.Error())
+			if h.logger != nil {
+				h.logger.Warn("apply rule actions failed",
+					"error", err,
+					"rule_id", rule.ID,
+					"path", req.URL.Path,
+					"method", req.Method,
+				)
+			}
+		}
 	}
 	proxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, proxyErr error) {
 		status := http.StatusBadGateway
@@ -173,7 +216,8 @@ func (h *Handler) resolveTarget(c *gin.Context, rule rules.Rule) (*url.URL, erro
 	return u, nil
 }
 
-func applyRuleActions(req *http.Request, actions rules.Actions) {
+func (h *Handler) applyRuleActions(req *http.Request, rule rules.Rule) error {
+	actions := rule.Actions
 	for key, value := range actions.SetHeaders {
 		req.Header.Set(key, value)
 	}
@@ -195,9 +239,10 @@ func applyRuleActions(req *http.Request, actions rules.Actions) {
 	}
 	if len(actions.OverrideJSON) > 0 || len(actions.RemoveJSON) > 0 {
 		if err := rewriteJSONBody(req, actions.OverrideJSON, actions.RemoveJSON); err != nil {
-			req.Header.Add("X-YAPI-Body-Rewrite-Error", err.Error())
+			return err
 		}
 	}
+	return nil
 }
 
 func rewriteJSONBody(req *http.Request, override map[string]any, remove []string) error {
@@ -218,78 +263,50 @@ func rewriteJSONBody(req *http.Request, override map[string]any, remove []string
 	if len(bodyBytes) == 0 {
 		return errors.New("empty body")
 	}
-	var payload any
-	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
-		return err
-	}
-	root, ok := payload.(map[string]any)
-	if !ok {
-		return errors.New("request body is not a json object")
-	}
 	for key, value := range override {
-		setJSONValue(root, key, value)
+		tokens, err := rules.ParseJSONPath(key)
+		if err != nil {
+			return err
+		}
+		normalized := tokensToSJSONPath(tokens)
+		bodyBytes, err = sjson.SetBytesOptions(bodyBytes, normalized, value, &sjson.Options{Optimistic: true})
+		if err != nil {
+			return fmt.Errorf("override path %s: %w", key, err)
+		}
 	}
 	for _, key := range remove {
-		removeJSONValue(root, key)
+		tokens, err := rules.ParseJSONPath(key)
+		if err != nil {
+			return err
+		}
+		normalized := tokensToSJSONPath(tokens)
+		bodyBytes, err = sjson.DeleteBytes(bodyBytes, normalized)
+		if err != nil {
+			return fmt.Errorf("remove path %s: %w", key, err)
+		}
 	}
-	newBody, err := json.Marshal(root)
-	if err != nil {
-		return err
-	}
-	reader := bytes.NewReader(newBody)
+	reader := bytes.NewReader(bodyBytes)
 	req.Body = io.NopCloser(reader)
 	if req.GetBody != nil {
 		req.GetBody = func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(newBody)), nil
+			return io.NopCloser(bytes.NewReader(bodyBytes)), nil
 		}
 	}
-	req.ContentLength = int64(len(newBody))
+	req.ContentLength = int64(len(bodyBytes))
 	if req.Header != nil {
-		req.Header.Set("Content-Length", strconv.FormatInt(int64(len(newBody)), 10))
+		req.Header.Set("Content-Length", strconv.Itoa(len(bodyBytes)))
 	}
 	return nil
 }
 
-func setJSONValue(root map[string]any, path string, value any) {
-	segments := strings.Split(path, ".")
-	current := root
-	for i, seg := range segments {
-		if i == len(segments)-1 {
-			current[seg] = value
-			return
+func tokensToSJSONPath(tokens []rules.JSONPathToken) string {
+	parts := make([]string, len(tokens))
+	for i, token := range tokens {
+		if token.IsKey() {
+			parts[i] = token.Key
+		} else {
+			parts[i] = strconv.Itoa(token.IndexValue())
 		}
-		next, ok := current[seg]
-		if !ok {
-			child := make(map[string]any)
-			current[seg] = child
-			current = child
-			continue
-		}
-		childMap, ok := next.(map[string]any)
-		if !ok {
-			childMap = make(map[string]any)
-			current[seg] = childMap
-		}
-		current = childMap
 	}
-}
-
-func removeJSONValue(root map[string]any, path string) {
-	segments := strings.Split(path, ".")
-	current := root
-	for i, seg := range segments {
-		if i == len(segments)-1 {
-			delete(current, seg)
-			return
-		}
-		next, ok := current[seg]
-		if !ok {
-			return
-		}
-		childMap, ok := next.(map[string]any)
-		if !ok {
-			return
-		}
-		current = childMap
-	}
+	return strings.Join(parts, ".")
 }

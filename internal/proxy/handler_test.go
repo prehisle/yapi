@@ -26,16 +26,23 @@ func TestApplyRuleActions_ModifyJSONAndHeaders(t *testing.T) {
 		SetHeaders:       map[string]string{"X-Trace-ID": "abc123"},
 		SetAuthorization: "Bearer xyz",
 		OverrideJSON: map[string]any{
-			"model":             "gpt-4.1",
-			"metadata.trace_id": "abc123",
+			"model":                 "gpt-4.1",
+			"metadata.trace_id":     "abc123",
+			"messages[0].role":      "system",
+			"messages[1].role":      "assistant",
+			"messages[1].content":   "hello",
+			"messages[1].recipient": "user",
 		},
-		RemoveJSON: []string{"unused"},
+		RemoveJSON: []string{"unused", "messages[0].content"},
 	}
 
-	applyRuleActions(req, actions)
+	h := &Handler{}
+	err = h.applyRuleActions(req, rules.Rule{ID: "rule-a", Actions: actions})
+	require.NoError(t, err)
 
 	require.Equal(t, "Bearer xyz", req.Header.Get("Authorization"))
 	require.Equal(t, "abc123", req.Header.Get("X-Trace-ID"))
+	require.Empty(t, req.Header.Values("X-YAPI-Body-Rewrite-Error"))
 
 	modifiedBody, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
@@ -52,4 +59,33 @@ func TestApplyRuleActions_ModifyJSONAndHeaders(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "abc123", metadata["trace_id"])
 
+	messages, ok := payload["messages"].([]any)
+	require.True(t, ok)
+	require.Len(t, messages, 2)
+
+	first, ok := messages[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "system", first["role"])
+	_, hasContent := first["content"]
+	require.False(t, hasContent)
+
+	second, ok := messages[1].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "assistant", second["role"])
+	require.Equal(t, "hello", second["content"])
+	require.Equal(t, "user", second["recipient"])
+}
+
+func TestApplyRuleActions_NonJSONBody(t *testing.T) {
+	req, err := http.NewRequest(http.MethodPost, "http://localhost/v1/chat", strings.NewReader("plain text"))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "text/plain")
+
+	actions := rules.Actions{
+		OverrideJSON: map[string]any{"model": "gpt-4"},
+	}
+
+	h := &Handler{}
+	err = h.applyRuleActions(req, rules.Rule{ID: "rule-non-json", Actions: actions})
+	require.Error(t, err)
 }

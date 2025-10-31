@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -29,6 +30,7 @@ func main() {
 	defer stop()
 
 	cfg := config.Load()
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	store, dbCloser := setupStore(ctx, cfg)
 	defer func() {
@@ -71,7 +73,7 @@ func main() {
 	admin.RegisterRoutes(router.Group("/admin"), adminHandler)
 
 	defaultTarget := mustParseURL(cfg.UpstreamBaseURL)
-	proxyHandler := proxy.NewHandler(ruleService, proxy.WithDefaultTarget(defaultTarget))
+	proxyHandler := proxy.NewHandler(ruleService, proxy.WithDefaultTarget(defaultTarget), proxy.WithLogger(logger))
 	proxy.RegisterRoutes(router.Group(""), proxyHandler)
 
 	server := &http.Server{
