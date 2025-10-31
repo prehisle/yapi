@@ -6,7 +6,7 @@ LLM 智能代理网关的 Go 实现，提供统一入口、动态规则路由和
 
 - `cmd/gateway/`：网关服务入口，负责启动 HTTP 服务与路由挂载。
 - `internal/proxy/`：核心代理逻辑，基于规则匹配请求并转发至上游。
-- `internal/admin/`：后台管理接口，提供规则 CRUD 和健康检查。
+- `internal/admin/`：后台管理接口（服务层 + HTTP handler），提供规则 CRUD、刷新通知等能力。
 - `pkg/rules/`：规则模型、验证逻辑，包含 PostgreSQL 存储、Redis 缓存与事件通知实现。
 - `deploy/`：容器化与本地集成环境定义（`Dockerfile`、`docker-compose.yml`）。
 - `docs/`：《需求规格说明与技术实施方案》等架构文档归档目录。
@@ -56,6 +56,18 @@ cp .env.example .env.local
 - `remove_json`：从 JSON 请求体移除指定字段或数组元素。
 
 > JSON 改写仅在 `Content-Type` 为 `application/json` 时生效，发生错误会在请求头附加 `X-YAPI-Body-Rewrite-Error` 并输出结构化日志（`slog`），便于排查。
+
+## 管理 API（简要）
+
+管理端暴露在 `/admin` 路径下，核心接口：
+
+- `GET /admin/rules`：列出全部规则，按优先级降序返回。
+- `POST /admin/rules`：创建规则，提交 JSON 结构体（参考 `pkg/rules/Rule`）。
+- `PUT /admin/rules/:id`：更新指定规则，若请求体缺少 `id` 将按路径补齐。
+- `DELETE /admin/rules/:id`：删除规则；若不存在返回 404。
+- `GET /admin/healthz`：健康检查。
+
+所有接口返回 `X-Request-ID`，可配合日志排查；错误响应包含 `error` 字段描述原因。
 
 ## 可观测性
 

@@ -71,7 +71,8 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID(), middleware.AccessLogger(logger))
 
-	adminHandler := admin.NewHandler(ruleService)
+	adminService := admin.NewService(ruleService)
+	adminHandler := admin.NewHandler(adminService)
 	admin.RegisterRoutes(router.Group("/admin"), adminHandler)
 
 	defaultTarget := mustParseURL(cfg.UpstreamBaseURL)

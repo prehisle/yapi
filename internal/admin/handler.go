@@ -11,11 +11,11 @@ import (
 
 // Handler 暴露管理端的 REST API。
 type Handler struct {
-	service rules.Service
+	service Service
 }
 
 // NewHandler 创建管理端处理器。
-func NewHandler(service rules.Service) *Handler {
+func NewHandler(service Service) *Handler {
 	return &Handler{service: service}
 }
 
@@ -46,7 +46,7 @@ func (h *Handler) createOrUpdateRule(c *gin.Context) {
 	if id := c.Param("id"); id != "" && rule.ID == "" {
 		rule.ID = id
 	}
-	if err := h.service.UpsertRule(c.Request.Context(), rule); err != nil {
+	if err := h.service.CreateOrUpdateRule(c.Request.Context(), rule); err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, rules.ErrInvalidRule) {
 			status = http.StatusBadRequest
