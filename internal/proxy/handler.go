@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/sjson"
 
+	"github.com/prehisle/yapi/internal/middleware"
 	"github.com/prehisle/yapi/pkg/rules"
 )
 
@@ -123,6 +124,7 @@ func (h *Handler) handle(c *gin.Context) {
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
+		middleware.WithRequestID(req, middleware.RequestIDFromContext(c))
 		if err := h.applyRuleActions(req, rule); err != nil {
 			req.Header.Add("X-YAPI-Body-Rewrite-Error", err.Error())
 			if h.logger != nil {
@@ -142,7 +144,21 @@ func (h *Handler) handle(c *gin.Context) {
 		}
 		http.Error(rw, proxyErr.Error(), status)
 	}
-	proxy.ServeHTTP(c.Writer, c.Request)
+	start := time.Now()
+	rec := &responseRecorder{ResponseWriter: c.Writer, status: http.StatusOK}
+	proxy.ServeHTTP(rec, c.Request)
+	if h.logger != nil {
+		h.logger.Info("proxy upstream",
+			"request_id", middleware.RequestIDFromContext(c),
+			"rule_id", rule.ID,
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"target", targetURL.Host,
+			"status", rec.status,
+			"bytes", rec.bytes,
+			"latency_ms", time.Since(start).Milliseconds(),
+		)
+	}
 }
 
 func (h *Handler) matchRule(c *gin.Context) (rules.Rule, error) {
@@ -309,4 +325,21 @@ func tokensToSJSONPath(tokens []rules.JSONPathToken) string {
 		}
 	}
 	return strings.Join(parts, ".")
+}
+
+type responseRecorder struct {
+	gin.ResponseWriter
+	status int
+	bytes  int64
+}
+
+func (r *responseRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *responseRecorder) Write(b []byte) (int, error) {
+	n, err := r.ResponseWriter.Write(b)
+	r.bytes += int64(n)
+	return n, err
 }

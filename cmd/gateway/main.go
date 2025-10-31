@@ -20,6 +20,7 @@ import (
 	"gorm.io/gorm/logger"
 
 	"github.com/prehisle/yapi/internal/admin"
+	"github.com/prehisle/yapi/internal/middleware"
 	"github.com/prehisle/yapi/internal/proxy"
 	"github.com/prehisle/yapi/pkg/config"
 	"github.com/prehisle/yapi/pkg/rules"
@@ -68,6 +69,7 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(middleware.RequestID(), middleware.AccessLogger(logger))
 
 	adminHandler := admin.NewHandler(ruleService)
 	admin.RegisterRoutes(router.Group("/admin"), adminHandler)

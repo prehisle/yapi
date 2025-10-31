@@ -57,6 +57,11 @@ cp .env.example .env.local
 
 > JSON 改写仅在 `Content-Type` 为 `application/json` 时生效，发生错误会在请求头附加 `X-YAPI-Body-Rewrite-Error` 并输出结构化日志（`slog`），便于排查。
 
+## 可观测性
+
+- 所有请求都会生成并透传 `X-Request-ID`，同时在访问日志和代理日志中输出。
+- 代理日志记录规则命中、目标上游、响应状态与耗时（毫秒），便于排查上游性能问题。
+
 ## 开发规范
 
 - 新增依赖后运行 `go mod tidy`，保持 `go.mod` / `go.sum` 同步。
