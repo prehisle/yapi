@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: yapi
+      POSTGRES_PASSWORD: yapi
+      POSTGRES_DB: yapi
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      GATEWAY_PORT: "8080"
+      UPSTREAM_BASE_URL: "https://api.openai.com"
+      DATABASE_DSN: "postgres://yapi:yapi@postgres:5432/yapi?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  postgres-data:

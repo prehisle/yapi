@@ -1,0 +1,21 @@
+# Go build
+bin/
+*.exe
+*.test
+*.out
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Generated artifacts
+coverage/
