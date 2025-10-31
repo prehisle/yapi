@@ -6,12 +6,14 @@ import { RuleDetailDrawer } from '../components/RuleDetailDrawer'
 import { useAuth } from '../hooks/useAuth'
 import { useUIContext } from '../context/UIContext'
 import { apiClient, UnauthorizedError } from '../lib/api'
-import type { Rule } from '../types/rule'
+import type { Rule, RuleListResponse } from '../types/rule'
 
 type DialogState =
   | { mode: 'create'; rule?: undefined }
   | { mode: 'edit'; rule: Rule }
   | null
+
+type StatusFilter = 'all' | 'enabled' | 'disabled'
 
 const RulesPage = () => {
   const { logout } = useAuth()
@@ -19,10 +21,13 @@ const RulesPage = () => {
   const navigate = useNavigate()
 
   const [rules, setRules] = useState<Rule[]>([])
+  const [total, setTotal] = useState(0)
+  const [enabledTotal, setEnabledTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [dialogState, setDialogState] = useState<DialogState>(null)
@@ -32,8 +37,25 @@ const RulesPage = () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await apiClient.get<Rule[]>('/admin/rules')
-      setRules(data)
+      const params = new URLSearchParams()
+      params.set('page', String(page))
+      params.set('page_size', String(pageSize))
+      const keyword = search.trim()
+      if (keyword) {
+        params.set('q', keyword)
+      }
+      if (statusFilter !== 'all') {
+        params.set('enabled', statusFilter === 'enabled' ? 'true' : 'false')
+      }
+      const query = params.toString()
+      const path = query ? `/admin/rules?${query}` : '/admin/rules'
+      const data = await apiClient.get<RuleListResponse>(path)
+      setRules(data.items)
+      setTotal(data.total)
+      setEnabledTotal(data.enabled_total)
+      if (data.page !== page) {
+        setPage(data.page)
+      }
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         logout()
@@ -46,40 +68,19 @@ const RulesPage = () => {
     } finally {
       setLoading(false)
     }
-  }, [logout, navigate, showError])
+  }, [page, pageSize, search, statusFilter, logout, navigate, showError])
 
   useEffect(() => {
     void fetchRules()
   }, [fetchRules])
 
-  const filteredRules = useMemo(() => {
-    if (!search.trim()) return rules
-    const keyword = search.trim().toLowerCase()
-    return rules.filter((rule) =>
-      rule.id.toLowerCase().includes(keyword) ||
-      (rule.matcher.path_prefix ?? '').toLowerCase().includes(keyword) ||
-      (rule.actions.set_target_url ?? '').toLowerCase().includes(keyword),
-    )
-  }, [rules, search])
-
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredRules.length / pageSize)), [filteredRules.length, pageSize])
-
   useEffect(() => {
-    setPage(1)
-  }, [search, pageSize])
+    setPage((prev) => (prev === 1 ? prev : 1))
+  }, [search, pageSize, statusFilter])
 
-  useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages)
-    }
-  }, [page, totalPages])
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize])
 
-  const paginatedRules = useMemo(() => {
-    const start = (page - 1) * pageSize
-    return filteredRules.slice(start, start + pageSize)
-  }, [filteredRules, page, pageSize])
-
-  const activeCount = useMemo(() => rules.filter((rule) => rule.enabled).length, [rules])
+  const isEmpty = !loading && rules.length === 0
 
   const openCreateDialog = useCallback(() => {
     setDialogState({ mode: 'create' })
@@ -174,13 +175,17 @@ const RulesPage = () => {
     [confirm, fetchRules, logout, navigate, showError, showSuccess],
   )
 
+  const handleRefresh = useCallback(() => {
+    void fetchRules()
+  }, [fetchRules])
+
   return (
     <div className="page">
       <header className="page__header">
         <div>
           <h1>规则管理</h1>
           <p style={{ margin: '8px 0 0', color: '#475467' }}>
-            共 {rules.length} 条规则，启用 {activeCount} 条
+            共 {total} 条规则，启用 {enabledTotal} 条
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
@@ -190,7 +195,7 @@ const RulesPage = () => {
           <button className="button button--ghost" onClick={logout}>
             退出登录
           </button>
-          <button className="button" onClick={() => fetchRules()} disabled={loading}>
+          <button className="button" onClick={handleRefresh} disabled={loading}>
             {loading ? '刷新中...' : '刷新'}
           </button>
         </div>
@@ -203,6 +208,15 @@ const RulesPage = () => {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+        <select
+          className="field__input field__input--inline"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+        >
+          <option value="all">全部状态</option>
+          <option value="enabled">仅启用</option>
+          <option value="disabled">仅未启用</option>
+        </select>
         <select
           className="field__input field__input--inline"
           value={pageSize}
@@ -220,7 +234,7 @@ const RulesPage = () => {
 
       {loading ? (
         <p>加载中...</p>
-      ) : filteredRules.length === 0 ? (
+      ) : isEmpty ? (
         <div className="notice">暂无规则，点击“新建规则”开始配置。</div>
       ) : (
         <div className="table-wrapper">
@@ -237,7 +251,7 @@ const RulesPage = () => {
               </tr>
             </thead>
             <tbody>
-              {paginatedRules.map((rule) => (
+              {rules.map((rule) => (
                 <tr key={rule.id}>
                   <td>{rule.id}</td>
                   <td>{rule.priority}</td>
@@ -280,12 +294,12 @@ const RulesPage = () => {
         </div>
       )}
 
-      {filteredRules.length > 0 ? (
+      {total > 0 ? (
         <div className="pagination">
           <button
             className="button button--ghost"
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={page === 1}
+            disabled={page === 1 || loading}
           >
             上一页
           </button>
@@ -295,7 +309,7 @@ const RulesPage = () => {
           <button
             className="button button--ghost"
             onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            disabled={page === totalPages}
+            disabled={page >= totalPages || loading}
           >
             下一页
           </button>

@@ -28,3 +28,11 @@ export interface Rule {
   actions: RuleActions
   enabled: boolean
 }
+
+export interface RuleListResponse {
+  items: Rule[]
+  total: number
+  enabled_total: number
+  page: number
+  page_size: number
+}

@@ -1,12 +1,12 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"log/slog"
 
 	"github.com/prehisle/yapi/pkg/metrics"
 )

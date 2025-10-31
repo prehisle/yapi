@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -63,7 +64,73 @@ func TestHandler_ListRules(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), `"rule-1"`)
+	var resp listRulesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, 1, resp.Total)
+	require.Len(t, resp.Items, 1)
+	require.Equal(t, "rule-1", resp.Items[0].ID)
+	require.Equal(t, 0, resp.EnabledTotal)
+}
+
+func TestHandler_ListRules_PaginationAndFilter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rule := func(id string, enabled bool, target string) rules.Rule {
+		return rules.Rule{
+			ID:      id,
+			Enabled: enabled,
+			Matcher: rules.Matcher{PathPrefix: "/" + id},
+			Actions: rules.Actions{SetTargetURL: target},
+		}
+	}
+	svc := &serviceStub{
+		listFn: func(ctx context.Context) ([]rules.Rule, error) {
+			return []rules.Rule{
+				rule("rule-1", true, "https://foo"),
+				rule("rule-2", false, "https://bar"),
+				rule("rule-3", true, "https://baz"),
+				rule("rule-4", true, "https://qux"),
+				rule("rule-5", false, "https://foo"),
+			}, nil
+		},
+	}
+	router := gin.New()
+	handler := NewHandler(svc, nil)
+	RegisterProtectedRoutes(router.Group("/admin"), handler)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/rules?page=1&page_size=2&enabled=true", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp listRulesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, 2, resp.PageSize)
+	require.Equal(t, 1, resp.Page)
+	require.Equal(t, 3, resp.Total)
+	require.Len(t, resp.Items, 2)
+	require.Equal(t, 3, resp.EnabledTotal)
+
+	// keyword filtering narrows down results
+	req = httptest.NewRequest(http.MethodGet, "/admin/rules?page=1&page_size=50&q=foo", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, 2, resp.Total)
+	require.Len(t, resp.Items, 2)
+	require.Equal(t, 1, resp.EnabledTotal)
+
+	// requesting a page beyond the last should clamp to last page
+	req = httptest.NewRequest(http.MethodGet, "/admin/rules?page=10&page_size=2", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, 2, resp.PageSize)
+	require.Equal(t, 3, resp.Page) // ceil(5/2)
+	require.Len(t, resp.Items, 1)
+	require.Equal(t, "rule-5", resp.Items[0].ID)
+	require.Equal(t, 3, resp.EnabledTotal)
 }
 
 func TestHandler_CreateRule_InvalidJSON(t *testing.T) {

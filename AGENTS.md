@@ -1,46 +1,41 @@
 # Repository Guidelines
 
-This guide helps contributors work consistently in this Go gateway monolith. Please follow the structure, commands, and conventions below when adding or modifying code.
-
 ## Project Structure & Module Organization
-- `cmd/gateway/main.go` — service entrypoint.
-- `internal/proxy` — core proxy pipeline and forwarding logic.
-- `internal/admin` — admin/management APIs.
-- `pkg/` — shared rule definitions, persistence models, metrics/monitoring.
-- `testdata/` — integration scenarios; `testdata/stream/` holds streaming golden files.
-- `web/admin/` — static admin UI assets.
-- `deploy/` — container assets (`Dockerfile`, `docker-compose.yml`).
-- `docs/` — architecture docs, including `需求规格说明与技术实施方案.md`.
+- `cmd/gateway/main.go` — entrypoint wiring proxy, admin, and config layers.
+- `internal/proxy` — request pipeline, routing rules, and upstream forwarding.
+- `internal/admin` — management APIs served alongside the gateway.
+- `pkg/` — shared libraries (rules, persistence, metrics) used across packages.
+- `testdata/` — integration scenarios; streaming goldens under `testdata/stream/`.
+- `web/admin/` — static UI bundle for the admin console.
+- `deploy/` — Docker assets (`Dockerfile`, `docker-compose.yml`, monitoring stack).
+- `docs/` — architectural references, CI/monitoring notes, and Grafana dashboard JSON.
 
 ## Build, Test, and Development Commands
-- `go mod tidy` — sync `go.mod`/`go.sum` after dependency changes.
-- `go build ./cmd/gateway` — build the gateway binary.
-- `docker compose -f deploy/docker-compose.yml up gateway` — run gateway with Redis and PostgreSQL.
-- `docker compose -f deploy/docker-compose.monitoring.yml up` — launch gateway + Prometheus + Grafana stack for observability testing.
-- `go test ./...` — run all tests; focus with `-run TestProxy` when needed.
-- `golangci-lint run ./...` — lint per `.golangci.yml` rules.
-- `make verify` — start docker compose, hit health/metrics endpoints, and run SSE regression.
-- CI pipeline & monitoring docs: see `docs/ci.md`, `docs/monitoring.md`, and the sample Grafana dashboard at `docs/grafana-dashboard.json`.
+- `go build ./cmd/gateway` builds the service binary.
+- `go test ./...` exercises unit tests; focus with `-run TestProxy` when iterating.
+- `golangci-lint run ./...` enforces lint and formatting rules.
+- `docker compose -f deploy/docker-compose.yml up gateway` runs the gateway with Redis/PostgreSQL.
+- `docker compose -f deploy/docker-compose.monitoring.yml up` spins up the observability stack (Prometheus, Grafana).
+- `make verify` launches dependencies, checks health/metrics endpoints, and runs SSE regression.
 
 ## Coding Style & Naming Conventions
-- Format with `gofmt` or `gofumpt`; CI enforces formatting.
-- Follow Go naming (e.g., `RuleMatcher`, `NewProxy`).
-- Keep single files ≤ 400 lines; add package-level comments for complex flows.
-- YAML/JSON use two-space indentation.
-- If a React admin is introduced, use ESLint + Prettier for consistency.
+- Format Go with `gofmt` or `gofumpt`; CI rejects unformatted files.
+- Adhere to idiomatic Go names (`RuleMatcher`, `NewProxy`); avoid abbreviations in public APIs.
+- Keep files under 400 lines and document complex flows with package comments.
+- Use two-space indentation for YAML/JSON under `deploy/` and `docs/`.
 
 ## Testing Guidelines
-- Use Go `testing` with `testify` assertions.
-- Name tests `Test<Component>_<Scenario>` (e.g., `TestRuleEngine_MatchesHeaders`).
-- Maintain ≥80% coverage for `internal/proxy` and `internal/rules`.
-- Integration tests in `internal/integration_test`; run with `-tags compose_test` to start Docker deps.
+- Write tests with Go `testing` plus `testify` assertions.
+- Name cases `Test<Component>_<Scenario>` (e.g., `TestRuleEngine_MatchesHeaders`).
+- Maintain ≥80% coverage in `internal/proxy` and `internal/rules`.
+- Place integration suites in `internal/integration_test` and run with `-tags compose_test` to provision Docker deps.
 
 ## Commit & Pull Request Guidelines
-- Use Conventional Commits (e.g., `feat: add redis-backed rule cache`).
-- PRs must describe impact scope, testing approach, linked requirement items, screenshots for admin changes, and config migration notes.
-- Request review from CODEOWNERS before merge.
+- Use Conventional Commits such as `feat: add redis-backed rule cache` or `fix: patch SSE notifier`.
+- PRs must state scope, testing performed, linked requirements, admin UI screenshots, and config migration notes.
+- Request CODEOWNER review before merge and ensure `go test ./...` plus `golangci-lint run ./...` succeed locally.
 
 ## Security & Configuration Tips
-- Do not commit secrets. Use `.env.local` (copy from `.env.local.example`) and Docker Compose overrides for dev; generate strong admin credentials per environment.
-- Rotate upstream API keys regularly; store config securely (planned encrypted config service).
-- For new dependencies, record threat assessment and mitigations in `docs/security.md`.
+- Never commit secrets; use `.env.local` sourced from `.env.local.example`.
+- Rotate upstream API keys and document mitigations for new dependencies in `docs/security.md`.
+- Store environment credentials securely and prefer Docker Compose overrides for local overrides.

@@ -79,7 +79,7 @@ func main() {
 
 	adminAuth := admin.NewAuthenticator(cfg.AdminUsername, cfg.AdminPassword, cfg.AdminTokenSecret, cfg.AdminTokenTTL)
 	adminService := admin.NewService(ruleService)
-	adminHandler := admin.NewHandler(adminService, adminAuth)
+	adminHandler := admin.NewHandler(adminService, adminAuth, admin.WithLogger(logger))
 	adminGroup := router.Group("/admin")
 	admin.RegisterPublicRoutes(adminGroup, adminHandler)
 	protected := adminGroup.Group("")
