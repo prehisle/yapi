@@ -42,6 +42,8 @@ cp .env.example .env.local
 - `REDIS_ADDR`：Redis 地址，默认 `localhost:6379`，用于缓存规则与发布刷新事件。
 - `REDIS_CHANNEL`：规则变更通知频道，默认 `rules:sync`。
 - `ADMIN_USERNAME` / `ADMIN_PASSWORD`：管理后台 Basic Auth 凭据，留空则允许匿名访问（仅限开发环境）。
+- `ADMIN_TOKEN_SECRET`：用于签发管理后台 JWT 的 HMAC 密钥；留空则禁用 token 登录。
+- `ADMIN_TOKEN_TTL`：JWT 过期时间（默认 `30m`，支持 `1h`、`3600` 等格式）。
 
 服务启动时会自动执行规则表结构迁移，并在无法连接 Redis 时退化为单实例内存缓存。
 
@@ -67,6 +69,11 @@ cp .env.example .env.local
 - `PUT /admin/rules/:id`：更新指定规则，若请求体缺少 `id` 将按路径补齐。
 - `DELETE /admin/rules/:id`：删除规则；若不存在返回 404。
 - `GET /admin/healthz`：健康检查。
+- `POST /admin/login`：传入用户名/密码获取短期 Bearer Token（需配置 `ADMIN_TOKEN_SECRET`）。
+
+认证说明：
+- 若设置了用户名/密码，所有规则接口要求携带 `Authorization` 头，可使用 Bearer Token（推荐）或 Basic Auth。
+- Token 模式默认有效期 `ADMIN_TOKEN_TTL`，需使用 `Authorization: Bearer <token>` 访问。
 
 所有接口返回 `X-Request-ID`，可配合日志排查；错误响应包含 `error` 字段描述原因。
 

@@ -71,11 +71,14 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID(), middleware.AccessLogger(logger))
 
+	adminAuth := admin.NewAuthenticator(cfg.AdminUsername, cfg.AdminPassword, cfg.AdminTokenSecret, cfg.AdminTokenTTL)
 	adminService := admin.NewService(ruleService)
-	adminHandler := admin.NewHandler(adminService)
+	adminHandler := admin.NewHandler(adminService, adminAuth)
 	adminGroup := router.Group("/admin")
-	adminGroup.Use(middleware.AdminBasicAuth(cfg.AdminUsername, cfg.AdminPassword))
-	admin.RegisterRoutes(adminGroup, adminHandler)
+	admin.RegisterPublicRoutes(adminGroup, adminHandler)
+	protected := adminGroup.Group("")
+	protected.Use(adminAuth.Middleware())
+	admin.RegisterProtectedRoutes(protected, adminHandler)
 
 	defaultTarget := mustParseURL(cfg.UpstreamBaseURL)
 	proxyHandler := proxy.NewHandler(ruleService, proxy.WithDefaultTarget(defaultTarget), proxy.WithLogger(logger))

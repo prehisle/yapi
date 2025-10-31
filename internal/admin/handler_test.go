@@ -3,16 +3,15 @@ package admin
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
-	"github.com/prehisle/yapi/internal/middleware"
 	"github.com/prehisle/yapi/pkg/rules"
 )
 
@@ -56,7 +55,8 @@ func TestHandler_ListRules(t *testing.T) {
 		},
 	}
 	router := gin.New()
-	RegisterRoutes(router.Group("/admin"), NewHandler(svc))
+	handler := NewHandler(svc, nil)
+	RegisterProtectedRoutes(router.Group("/admin"), handler)
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/rules", nil)
 	rec := httptest.NewRecorder()
@@ -69,7 +69,8 @@ func TestHandler_ListRules(t *testing.T) {
 func TestHandler_CreateRule_InvalidJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	RegisterRoutes(router.Group("/admin"), NewHandler(&serviceStub{}))
+	handler := NewHandler(&serviceStub{}, nil)
+	RegisterProtectedRoutes(router.Group("/admin"), handler)
 
 	req := httptest.NewRequest(http.MethodPost, "/admin/rules", bytes.NewBufferString("invalid"))
 	req.Header.Set("Content-Type", "application/json")
@@ -87,7 +88,8 @@ func TestHandler_CreateRule_InvalidRule(t *testing.T) {
 		},
 	}
 	router := gin.New()
-	RegisterRoutes(router.Group("/admin"), NewHandler(svc))
+	handler := NewHandler(svc, nil)
+	RegisterProtectedRoutes(router.Group("/admin"), handler)
 
 	body := `{"id":"rule-1"}`
 	req := httptest.NewRequest(http.MethodPost, "/admin/rules", bytes.NewBufferString(body))
@@ -106,7 +108,8 @@ func TestHandler_DeleteRule_NotFound(t *testing.T) {
 		},
 	}
 	router := gin.New()
-	RegisterRoutes(router.Group("/admin"), NewHandler(svc))
+	handler := NewHandler(svc, nil)
+	RegisterProtectedRoutes(router.Group("/admin"), handler)
 
 	req := httptest.NewRequest(http.MethodDelete, "/admin/rules/rule-x", nil)
 	rec := httptest.NewRecorder()
@@ -123,7 +126,8 @@ func TestHandler_DeleteRule_InternalError(t *testing.T) {
 		},
 	}
 	router := gin.New()
-	RegisterRoutes(router.Group("/admin"), NewHandler(svc))
+	handler := NewHandler(svc, nil)
+	RegisterProtectedRoutes(router.Group("/admin"), handler)
 
 	req := httptest.NewRequest(http.MethodDelete, "/admin/rules/rule-x", nil)
 	rec := httptest.NewRecorder()
@@ -135,10 +139,11 @@ func TestHandler_DeleteRule_InternalError(t *testing.T) {
 func TestHandler_WithAuth_Unauthorized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := &serviceStub{}
+	auth := NewAuthenticator("admin", "secret", "sign-key", time.Minute)
 	router := gin.New()
 	group := router.Group("/admin")
-	group.Use(middleware.AdminBasicAuth("admin", "secret"))
-	RegisterRoutes(group, NewHandler(svc))
+	group.Use(auth.Middleware())
+	RegisterProtectedRoutes(group, NewHandler(svc, auth))
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/rules", nil)
 	rec := httptest.NewRecorder()
@@ -147,19 +152,53 @@ func TestHandler_WithAuth_Unauthorized(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestHandler_WithAuth_Authorized(t *testing.T) {
+func TestHandler_WithAuth_Bearer(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := &serviceStub{}
+	auth := NewAuthenticator("admin", "secret", "sign-key", time.Minute)
+	token, err := auth.IssueToken("admin", "secret")
+	require.NoError(t, err)
 	router := gin.New()
 	group := router.Group("/admin")
-	group.Use(middleware.AdminBasicAuth("admin", "secret"))
-	RegisterRoutes(group, NewHandler(svc))
+	group.Use(auth.Middleware())
+	RegisterProtectedRoutes(group, NewHandler(svc, auth))
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/rules", nil)
-	token := base64.StdEncoding.EncodeToString([]byte("admin:secret"))
-	req.Header.Set("Authorization", "Basic "+token)
+	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestHandler_Login_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	auth := NewAuthenticator("admin", "secret", "sign-key", time.Minute)
+	handler := NewHandler(&serviceStub{}, auth)
+	router := gin.New()
+	RegisterPublicRoutes(router.Group("/admin"), handler)
+
+	body := bytes.NewBufferString(`{"username":"admin","password":"secret"}`)
+	req := httptest.NewRequest(http.MethodPost, "/admin/login", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "access_token")
+}
+
+func TestHandler_Login_Disabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewHandler(&serviceStub{}, nil)
+	router := gin.New()
+	RegisterPublicRoutes(router.Group("/admin"), handler)
+
+	body := bytes.NewBufferString(`{"username":"admin","password":"secret"}`)
+	req := httptest.NewRequest(http.MethodPost, "/admin/login", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusNotImplemented, rec.Code)
 }
