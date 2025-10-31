@@ -77,12 +77,14 @@ func NewHandler(service rules.Service, opts ...Option) *Handler {
 	return h
 }
 
-// RegisterRoutes 挂载代理相关路由。
-func RegisterRoutes(group *gin.RouterGroup, handler *Handler) {
-	group.Any("/*proxyPath", handler.handle)
+// RegisterRoutes 将代理注册为全局 fallback。
+func RegisterRoutes(engine *gin.Engine, handler *Handler) {
+	engine.NoRoute(handler.Handle)
+	engine.NoMethod(handler.Handle)
 }
 
-func (h *Handler) handle(c *gin.Context) {
+// Handle 转发任意未命中的请求。
+func (h *Handler) Handle(c *gin.Context) {
 	rule, err := h.matchRule(c)
 	if err != nil {
 		status := http.StatusBadGateway

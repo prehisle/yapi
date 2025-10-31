@@ -82,6 +82,27 @@ cp .env.example .env.local
 - 所有请求都会生成并透传 `X-Request-ID`，同时在访问日志和代理日志中输出。
 - 代理日志记录规则命中、目标上游、响应状态与耗时（毫秒），便于排查上游性能问题。
 
+## 管理后台前端
+
+前端位于 `web/admin/`，采用 React + TypeScript + Vite 实现。主要功能：
+
+- 登录页：调用 `POST /admin/login` 获得短期 Bearer Token，并持久化至浏览器。
+- 规则列表：支持搜索、分页展示、刷新，提供规则的启用/停用、编辑、删除操作（带确认）。
+- 规则表单：支持新建或更新规则，配置路径、方法、目标地址、头部与 JSON 动作等高级字段。
+- 通知与确认：统一 Toast 提示操作结果，删除等敏感操作提供二次确认。
+
+开发/运行：
+
+```bash
+cd web/admin
+npm install        # 首次安装依赖
+npm run dev        # 本地开发，默认代理请求至 http://localhost:8080
+npm run build      # 产出静态资源
+npm run lint       # 代码质量检查
+```
+
+默认开发代理会将 `/admin` 请求转发至后端服务；如需定制可设置 `VITE_API_BASE_URL`。
+
 ## 开发规范
 
 - 新增依赖后运行 `go mod tidy`，保持 `go.mod` / `go.sum` 同步。

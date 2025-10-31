@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -27,6 +28,8 @@ import (
 )
 
 func main() {
+	loadEnvFiles()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -82,7 +85,7 @@ func main() {
 
 	defaultTarget := mustParseURL(cfg.UpstreamBaseURL)
 	proxyHandler := proxy.NewHandler(ruleService, proxy.WithDefaultTarget(defaultTarget), proxy.WithLogger(logger))
-	proxy.RegisterRoutes(router.Group(""), proxyHandler)
+	proxy.RegisterRoutes(router, proxyHandler)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.GatewayPort,
@@ -103,6 +106,32 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+func loadEnvFiles() {
+	tryLoad := func(path string, overload bool) {
+		if _, err := os.Stat(path); err != nil {
+			if err != nil && !errors.Is(err, os.ErrNotExist) {
+				log.Printf("warning: failed to stat %s: %v", path, err)
+			}
+			return
+		}
+
+		var err error
+		if overload {
+			err = godotenv.Overload(path)
+		} else {
+			err = godotenv.Load(path)
+		}
+		if err != nil {
+			log.Printf("warning: failed to load %s: %v", path, err)
+			return
+		}
+		log.Printf("environment loaded from %s", path)
+	}
+
+	tryLoad(".env", false)
+	tryLoad(".env.local", true)
 }
 
 func mustParseURL(raw string) *url.URL {
