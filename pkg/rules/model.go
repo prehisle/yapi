@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // ErrInvalidRule signals that a rule failed basic validation.
@@ -12,11 +13,16 @@ var ErrInvalidRule = errors.New("invalid rule")
 
 // Rule 定义了一条完整的代理规则。
 type Rule struct {
-	ID       string  `json:"id"`
-	Priority int     `json:"priority"`
-	Matcher  Matcher `json:"matcher"`
-	Actions  Actions `json:"actions"`
-	Enabled  bool    `json:"enabled"`
+	ID        string    `json:"id"`
+	Priority  int       `json:"priority"`
+	Matcher   Matcher   `json:"matcher"`
+	Actions   Actions   `json:"actions"`
+	Enabled   bool      `json:"enabled"`
+	Version   int       `json:"version"`
+	CreatedBy string    `json:"created_by,omitempty"`
+	UpdatedBy string    `json:"updated_by,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Matcher 描述了匹配客户端请求的条件。
