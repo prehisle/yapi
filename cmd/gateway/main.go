@@ -73,7 +73,9 @@ func main() {
 
 	adminService := admin.NewService(ruleService)
 	adminHandler := admin.NewHandler(adminService)
-	admin.RegisterRoutes(router.Group("/admin"), adminHandler)
+	adminGroup := router.Group("/admin")
+	adminGroup.Use(middleware.AdminBasicAuth(cfg.AdminUsername, cfg.AdminPassword))
+	admin.RegisterRoutes(adminGroup, adminHandler)
 
 	defaultTarget := mustParseURL(cfg.UpstreamBaseURL)
 	proxyHandler := proxy.NewHandler(ruleService, proxy.WithDefaultTarget(defaultTarget), proxy.WithLogger(logger))

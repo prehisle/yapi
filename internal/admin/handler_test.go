@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/prehisle/yapi/internal/middleware"
 	"github.com/prehisle/yapi/pkg/rules"
 )
 
@@ -128,4 +130,36 @@ func TestHandler_DeleteRule_InternalError(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestHandler_WithAuth_Unauthorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &serviceStub{}
+	router := gin.New()
+	group := router.Group("/admin")
+	group.Use(middleware.AdminBasicAuth("admin", "secret"))
+	RegisterRoutes(group, NewHandler(svc))
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/rules", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestHandler_WithAuth_Authorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &serviceStub{}
+	router := gin.New()
+	group := router.Group("/admin")
+	group.Use(middleware.AdminBasicAuth("admin", "secret"))
+	RegisterRoutes(group, NewHandler(svc))
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/rules", nil)
+	token := base64.StdEncoding.EncodeToString([]byte("admin:secret"))
+	req.Header.Set("Authorization", "Basic "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
 }

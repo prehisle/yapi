@@ -12,6 +12,8 @@ type Config struct {
 	DatabaseDSN     string
 	RedisAddr       string
 	RedisChannel    string
+	AdminUsername   string
+	AdminPassword   string
 }
 
 const (
@@ -28,9 +30,14 @@ func Load() Config {
 		DatabaseDSN:     os.Getenv("DATABASE_DSN"),
 		RedisAddr:       lookupEnvOrDefault("REDIS_ADDR", defaultRedisAddr),
 		RedisChannel:    lookupEnvOrDefault("REDIS_CHANNEL", defaultRedisChannel),
+		AdminUsername:   os.Getenv("ADMIN_USERNAME"),
+		AdminPassword:   os.Getenv("ADMIN_PASSWORD"),
 	}
 	if cfg.DatabaseDSN == "" {
 		log.Println("warning: DATABASE_DSN 未设置，管理端规则持久化将不可用")
+	}
+	if cfg.AdminUsername == "" || cfg.AdminPassword == "" {
+		log.Println("warning: 管理端未配置 ADMIN_USERNAME/ADMIN_PASSWORD，将默认允许匿名访问")
 	}
 	return cfg
 }

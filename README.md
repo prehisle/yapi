@@ -41,6 +41,7 @@ cp .env.example .env.local
 - `DATABASE_DSN`：PostgreSQL 连接串，用于规则持久化（示例：`postgres://user:pass@host:5432/db?sslmode=disable`）。
 - `REDIS_ADDR`：Redis 地址，默认 `localhost:6379`，用于缓存规则与发布刷新事件。
 - `REDIS_CHANNEL`：规则变更通知频道，默认 `rules:sync`。
+- `ADMIN_USERNAME` / `ADMIN_PASSWORD`：管理后台 Basic Auth 凭据，留空则允许匿名访问（仅限开发环境）。
 
 服务启动时会自动执行规则表结构迁移，并在无法连接 Redis 时退化为单实例内存缓存。
 
