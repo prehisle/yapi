@@ -39,9 +39,11 @@ func TestService_UpsertAndList(t *testing.T) {
 	require.Equal(t, "rule-a", rulesList[0].ID)
 
 	rulesList[0].Actions.SetHeaders = map[string]string{"X-Debug": "true"}
+	rulesList[0].Actions.OverrideJSON = map[string]any{"model": "patched"}
 	nextList, err := svc.ListRules(ctx)
 	require.NoError(t, err)
 	require.Nil(t, nextList[0].Actions.SetHeaders)
+	require.Nil(t, nextList[0].Actions.OverrideJSON)
 
 	got, err := svc.GetRule(ctx, "rule-b")
 	require.NoError(t, err)

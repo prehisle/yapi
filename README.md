@@ -44,6 +44,19 @@ cp .env.example .env.local
 
 服务启动时会自动执行规则表结构迁移，并在无法连接 Redis 时退化为单实例内存缓存。
 
+## 规则动作能力
+
+网关根据后台配置的规则执行动作，当前支持：
+
+- `set_target_url`：重定向请求目标地址。
+- `set_headers` / `add_headers` / `remove_headers`：统一改写或剔除请求头。
+- `set_authorization`：直接注入 `Authorization` 头，避免在客户端分发密钥。
+- `rewrite_path_regex`：基于正则重写请求路径。
+- `override_json`：对 JSON 请求体指定字段赋值，支持点号表示的多级嵌套键（仅对象类型）。
+- `remove_json`：从 JSON 请求体移除指定字段。
+
+> JSON 改写仅对对象类型请求体生效，解析失败时会在请求头附加 `X-YAPI-Body-Rewrite-Error` 便于排查。
+
 ## 开发规范
 
 - 新增依赖后运行 `go mod tidy`，保持 `go.mod` / `go.sum` 同步。

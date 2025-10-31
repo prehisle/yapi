@@ -1,12 +1,16 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -179,11 +183,113 @@ func applyRuleActions(req *http.Request, actions rules.Actions) {
 	for _, key := range actions.RemoveHeaders {
 		req.Header.Del(key)
 	}
+	if auth := strings.TrimSpace(actions.SetAuthorization); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
 
 	if expr := actions.RewritePathRegex; expr != nil {
 		re, err := regexp.Compile(expr.Pattern)
 		if err == nil {
 			req.URL.Path = re.ReplaceAllString(req.URL.Path, expr.Replace)
 		}
+	}
+	if len(actions.OverrideJSON) > 0 || len(actions.RemoveJSON) > 0 {
+		if err := rewriteJSONBody(req, actions.OverrideJSON, actions.RemoveJSON); err != nil {
+			req.Header.Add("X-YAPI-Body-Rewrite-Error", err.Error())
+		}
+	}
+}
+
+func rewriteJSONBody(req *http.Request, override map[string]any, remove []string) error {
+	if req.Body == nil {
+		return errors.New("missing request body")
+	}
+	contentType := strings.ToLower(req.Header.Get("Content-Type"))
+	if !strings.Contains(contentType, "application/json") {
+		return errors.New("content type is not json")
+	}
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		return err
+	}
+	if err := req.Body.Close(); err != nil {
+		return err
+	}
+	if len(bodyBytes) == 0 {
+		return errors.New("empty body")
+	}
+	var payload any
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		return err
+	}
+	root, ok := payload.(map[string]any)
+	if !ok {
+		return errors.New("request body is not a json object")
+	}
+	for key, value := range override {
+		setJSONValue(root, key, value)
+	}
+	for _, key := range remove {
+		removeJSONValue(root, key)
+	}
+	newBody, err := json.Marshal(root)
+	if err != nil {
+		return err
+	}
+	reader := bytes.NewReader(newBody)
+	req.Body = io.NopCloser(reader)
+	if req.GetBody != nil {
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(newBody)), nil
+		}
+	}
+	req.ContentLength = int64(len(newBody))
+	if req.Header != nil {
+		req.Header.Set("Content-Length", strconv.FormatInt(int64(len(newBody)), 10))
+	}
+	return nil
+}
+
+func setJSONValue(root map[string]any, path string, value any) {
+	segments := strings.Split(path, ".")
+	current := root
+	for i, seg := range segments {
+		if i == len(segments)-1 {
+			current[seg] = value
+			return
+		}
+		next, ok := current[seg]
+		if !ok {
+			child := make(map[string]any)
+			current[seg] = child
+			current = child
+			continue
+		}
+		childMap, ok := next.(map[string]any)
+		if !ok {
+			childMap = make(map[string]any)
+			current[seg] = childMap
+		}
+		current = childMap
+	}
+}
+
+func removeJSONValue(root map[string]any, path string) {
+	segments := strings.Split(path, ".")
+	current := root
+	for i, seg := range segments {
+		if i == len(segments)-1 {
+			delete(current, seg)
+			return
+		}
+		next, ok := current[seg]
+		if !ok {
+			return
+		}
+		childMap, ok := next.(map[string]any)
+		if !ok {
+			return
+		}
+		current = childMap
 	}
 }

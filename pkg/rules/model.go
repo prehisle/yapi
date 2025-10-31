@@ -32,6 +32,9 @@ type Actions struct {
 	SetHeaders       map[string]string      `json:"set_headers,omitempty"`
 	AddHeaders       map[string]string      `json:"add_headers,omitempty"`
 	RemoveHeaders    []string               `json:"remove_headers,omitempty"`
+	SetAuthorization string                 `json:"set_authorization,omitempty"`
+	OverrideJSON     map[string]any         `json:"override_json,omitempty"`
+	RemoveJSON       []string               `json:"remove_json,omitempty"`
 	RewritePathRegex *RewritePathExpression `json:"rewrite_path_regex,omitempty"`
 	Script           string                 `json:"script,omitempty"`
 }
@@ -79,12 +82,24 @@ func validateMatcher(m Matcher) error {
 func validateActions(a Actions) error {
 	if a.SetTargetURL == "" && len(a.SetHeaders) == 0 &&
 		len(a.AddHeaders) == 0 && len(a.RemoveHeaders) == 0 &&
+		strings.TrimSpace(a.SetAuthorization) == "" &&
+		len(a.OverrideJSON) == 0 && len(a.RemoveJSON) == 0 &&
 		a.RewritePathRegex == nil && strings.TrimSpace(a.Script) == "" {
 		return fmt.Errorf("%w: actions must not be empty", ErrInvalidRule)
 	}
 	if a.RewritePathRegex != nil {
 		if _, err := regexp.Compile(a.RewritePathRegex.Pattern); err != nil {
 			return fmt.Errorf("%w: invalid rewrite regex pattern: %v", ErrInvalidRule, err)
+		}
+	}
+	for key := range a.OverrideJSON {
+		if strings.TrimSpace(key) == "" {
+			return fmt.Errorf("%w: override_json key must not be empty", ErrInvalidRule)
+		}
+	}
+	for i, key := range a.RemoveJSON {
+		if strings.TrimSpace(key) == "" {
+			return fmt.Errorf("%w: remove_json[%d] must not be empty", ErrInvalidRule, i)
 		}
 	}
 	return nil

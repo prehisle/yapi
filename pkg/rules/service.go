@@ -230,9 +230,39 @@ func cloneRule(r Rule) Rule {
 		}
 	}
 	cloned.Actions.RemoveHeaders = append([]string(nil), r.Actions.RemoveHeaders...)
+	if len(r.Actions.OverrideJSON) > 0 {
+		cloned.Actions.OverrideJSON = cloneMapAny(r.Actions.OverrideJSON)
+	}
+	cloned.Actions.RemoveJSON = append([]string(nil), r.Actions.RemoveJSON...)
 	if r.Actions.RewritePathRegex != nil {
 		rewrite := *r.Actions.RewritePathRegex
 		cloned.Actions.RewritePathRegex = &rewrite
 	}
 	return cloned
+}
+
+func cloneMapAny(src map[string]any) map[string]any {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]any, len(src))
+	for k, v := range src {
+		cloned[k] = deepCopyAny(v)
+	}
+	return cloned
+}
+
+func deepCopyAny(v any) any {
+	switch value := v.(type) {
+	case map[string]any:
+		return cloneMapAny(value)
+	case []any:
+		dup := make([]any, len(value))
+		for i := range value {
+			dup[i] = deepCopyAny(value[i])
+		}
+		return dup
+	default:
+		return value
+	}
 }
