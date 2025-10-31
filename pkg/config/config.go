@@ -4,40 +4,47 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 // Config 汇总服务运行所需的环境变量配置。
 type Config struct {
-	GatewayPort     string
-	UpstreamBaseURL string
-	DatabaseDSN     string
-	RedisAddr       string
-	RedisChannel    string
-	AdminUsername   string
-	AdminPassword   string
+	GatewayPort      string
+	UpstreamBaseURL  string
+	DatabaseDSN      string
+	RedisAddr        string
+	RedisChannel     string
+	RedisMaintMode   string
+	AdminUsername    string
+	AdminPassword    string
 	AdminTokenSecret string
 	AdminTokenTTL    time.Duration
 }
 
 const (
-	defaultGatewayPort  = "8080"
-	defaultRedisAddr    = "localhost:6379"
-	defaultRedisChannel = "rules:sync"
+	defaultGatewayPort     = "8080"
+	defaultRedisAddr       = "localhost:6379"
+	defaultRedisChannel    = "rules:sync"
+	RedisMaintModeDisabled = "disabled"
+	RedisMaintModeAuto     = "auto"
+	RedisMaintModeEnabled  = "enabled"
 )
 
 // Load 从环境变量解析配置。
 func Load() Config {
 	cfg := Config{
-		GatewayPort:     lookupEnvOrDefault("GATEWAY_PORT", defaultGatewayPort),
-		UpstreamBaseURL: os.Getenv("UPSTREAM_BASE_URL"),
-		DatabaseDSN:     os.Getenv("DATABASE_DSN"),
-		RedisAddr:       lookupEnvOrDefault("REDIS_ADDR", defaultRedisAddr),
-		RedisChannel:    lookupEnvOrDefault("REDIS_CHANNEL", defaultRedisChannel),
-		AdminUsername:   os.Getenv("ADMIN_USERNAME"),
-		AdminPassword:   os.Getenv("ADMIN_PASSWORD"),
+		GatewayPort:      lookupEnvOrDefault("GATEWAY_PORT", defaultGatewayPort),
+		UpstreamBaseURL:  os.Getenv("UPSTREAM_BASE_URL"),
+		DatabaseDSN:      os.Getenv("DATABASE_DSN"),
+		RedisAddr:        lookupEnvOrDefault("REDIS_ADDR", defaultRedisAddr),
+		RedisChannel:     lookupEnvOrDefault("REDIS_CHANNEL", defaultRedisChannel),
+		RedisMaintMode:   lookupEnvOrDefault("REDIS_MAINT_NOTIFICATIONS_MODE", RedisMaintModeDisabled),
+		AdminUsername:    os.Getenv("ADMIN_USERNAME"),
+		AdminPassword:    os.Getenv("ADMIN_PASSWORD"),
 		AdminTokenSecret: os.Getenv("ADMIN_TOKEN_SECRET"),
 	}
+	cfg.RedisMaintMode = normalizeMaintMode(cfg.RedisMaintMode)
 	if ttl := os.Getenv("ADMIN_TOKEN_TTL"); ttl != "" {
 		if parsed, err := time.ParseDuration(ttl); err == nil {
 			cfg.AdminTokenTTL = parsed
@@ -67,4 +74,17 @@ func lookupEnvOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func normalizeMaintMode(mode string) string {
+	normalized := strings.ToLower(strings.TrimSpace(mode))
+	switch normalized {
+	case "", RedisMaintModeDisabled:
+		return RedisMaintModeDisabled
+	case RedisMaintModeAuto, RedisMaintModeEnabled:
+		return normalized
+	default:
+		log.Printf("warning: REDIS_MAINT_NOTIFICATIONS_MODE=%q 不受支持，将回退为 disabled", mode)
+		return RedisMaintModeDisabled
+	}
 }

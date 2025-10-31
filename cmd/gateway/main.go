@@ -15,7 +15,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
+	"github.com/redis/go-redis/v9/maintnotifications"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -73,6 +75,7 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID(), middleware.AccessLogger(logger))
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	adminAuth := admin.NewAuthenticator(cfg.AdminUsername, cfg.AdminPassword, cfg.AdminTokenSecret, cfg.AdminTokenTTL)
 	adminService := admin.NewService(ruleService)
@@ -202,7 +205,17 @@ func configureSQLDB(db *sql.DB) {
 }
 
 func setupRedis(ctx context.Context, cfg config.Config) (*redis.Client, rules.Cache, rules.EventBus) {
-	client := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	options := &redis.Options{Addr: cfg.RedisAddr}
+	switch cfg.RedisMaintMode {
+	case config.RedisMaintModeAuto:
+		options.MaintNotificationsConfig = maintnotifications.DefaultConfig()
+	case config.RedisMaintModeEnabled:
+		options.MaintNotificationsConfig = &maintnotifications.Config{Mode: maintnotifications.ModeEnabled}
+	default:
+		options.MaintNotificationsConfig = &maintnotifications.Config{Mode: maintnotifications.ModeDisabled}
+	}
+
+	client := redis.NewClient(options)
 	pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if err := client.Ping(pingCtx).Err(); err != nil {

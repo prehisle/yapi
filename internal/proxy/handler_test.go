@@ -2,12 +2,16 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	"github.com/prehisle/yapi/pkg/rules"
@@ -88,4 +92,52 @@ func TestApplyRuleActions_NonJSONBody(t *testing.T) {
 	h := &Handler{}
 	err = h.applyRuleActions(req, rules.Rule{ID: "rule-non-json", Actions: actions})
 	require.Error(t, err)
+}
+
+func TestHandler_StreamPassthrough(t *testing.T) {
+	chunks := []string{"data: first\n\n", "data: second\n\n", "data: [DONE]\n\n"}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, ok := w.(http.Flusher)
+		require.True(t, ok)
+		for _, chunk := range chunks {
+			_, err := io.WriteString(w, chunk)
+			require.NoError(t, err)
+			flusher.Flush()
+			time.Sleep(5 * time.Millisecond)
+		}
+	}))
+	defer upstream.Close()
+
+	store := rules.NewMemoryStore()
+	svc := rules.NewService(store)
+	rule := rules.Rule{
+		ID:       "stream-rule",
+		Priority: 100,
+		Enabled:  true,
+		Matcher: rules.Matcher{
+			PathPrefix: "/v1",
+		},
+		Actions: rules.Actions{
+			SetTargetURL: upstream.URL,
+		},
+	}
+	require.NoError(t, svc.UpsertRule(context.Background(), rule))
+
+	h := NewHandler(svc)
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.New()
+	RegisterRoutes(router, h)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/v1/chat")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
+	require.Equal(t, strings.Join(chunks, ""), string(body))
 }

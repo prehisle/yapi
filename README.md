@@ -27,11 +27,17 @@ LLM 智能代理网关的 Go 实现，提供统一入口、动态规则路由和
    ```bash
    docker compose -f deploy/docker-compose.yml up gateway
    ```
+4. 启动监控观测（可选）：
+   ```bash
+   docker compose -f deploy/docker-compose.monitoring.yml up
+   ```
+   该命令将同时拉起 gateway、Prometheus 与 Grafana，默认 Grafana 访问地址为 `http://localhost:3000`（账号/密码：`admin`/`admin`）。
 
 首次运行建议复制环境变量模板并按需调整：
 ```bash
 cp .env.example .env.local
 ```
+随后将 `.env.local` 中的管理员账号、密码与 JWT 密钥替换为强随机值；可使用命令 `openssl rand -hex 32` 生成密钥。建议为开发、测试、生产环境分别维护独立的 `.env.<env>.local` 并通过 CI/CD 注入，避免共享凭据。
 
 ## 配置说明
 
@@ -106,9 +112,10 @@ npm run lint       # 代码质量检查
 ## 开发规范
 
 - 新增依赖后运行 `go mod tidy`，保持 `go.mod` / `go.sum` 同步。
-- 提交前执行 `golangci-lint run ./...`，规则配置见 `.golangci.yml`。
+- 提交前执行 `golangci-lint run ./...`，规则配置见 `.golangci.yml`；也可以使用 `make lint`、`make test`、`make verify` 快速运行常规检查，其中 `make verify` 会自动拉起 Docker Compose 并执行健康检查、指标校验与 SSE 回归测试。
 - 代码统一使用 `gofmt` / `gofumpt` 自动格式化。
 - 测试命名遵循 `Test<组件>_<场景>`，集成测试置于 `internal/integration_test`（需带 `-tags compose_test`）。
+- 持续集成流程详见 `docs/ci.md`，部署监控参考 `docs/monitoring.md` 与 `docs/grafana-dashboard.json`。
 
 ## 下一步路线
 

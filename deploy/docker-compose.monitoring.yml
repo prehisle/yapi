@@ -1,0 +1,66 @@
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file:
+      - ../.env.local
+    environment:
+      GATEWAY_PORT: "8080"
+      UPSTREAM_BASE_URL: "https://api.openai.com"
+      DATABASE_DSN: "postgres://yapi:yapi@postgres:5432/yapi?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+      REDIS_CHANNEL: "rules:sync"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: yapi
+      POSTGRES_PASSWORD: yapi
+      POSTGRES_DB: yapi
+    ports:
+      - "9109:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "9108:6379"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=24h
+    ports:
+      - "9090:9090"
+    depends_on:
+      - gateway
+
+  grafana:
+    image: grafana/grafana:10.4.5
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ../docs/grafana-dashboard.json:/var/lib/grafana/dashboards/gateway.json:ro
+
+volumes:
+  postgres-data:
+  grafana-data:

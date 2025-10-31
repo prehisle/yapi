@@ -7,6 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"log/slog"
+
+	"github.com/prehisle/yapi/pkg/metrics"
 )
 
 // RequestIDKey is the gin context key storing current request id.
@@ -36,6 +38,11 @@ func AccessLogger(logger *slog.Logger) gin.HandlerFunc {
 		duration := time.Since(start)
 		status := c.Writer.Status()
 		requestID := RequestIDFromContext(c)
+		route := c.FullPath()
+		if route == "" {
+			route = "<unmatched>"
+		}
+
 		logger.Info("http request",
 			"request_id", requestID,
 			"method", c.Request.Method,
@@ -45,6 +52,8 @@ func AccessLogger(logger *slog.Logger) gin.HandlerFunc {
 			"client_ip", c.ClientIP(),
 			"user_agent", c.Request.UserAgent(),
 		)
+
+		metrics.ObserveHTTPRequest(c.Request.Method, route, status, duration)
 	}
 }
 

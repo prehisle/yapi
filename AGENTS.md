@@ -1,19 +1,46 @@
 # Repository Guidelines
 
-## 项目结构与模块划分
-网关采用单体 Go 服务实现：入口放在 `cmd/gateway/main.go`，核心代理逻辑位于 `internal/proxy`，后台管理接口放在 `internal/admin`。跨模块共享的规则定义、持久化模型与监控工具放入 `pkg/`。集成场景用例放在 `testdata/`，静态管理界面资源存放于 `web/admin/`，容器化资源如 `Dockerfile`、`docker-compose.yml` 放在 `deploy/`。包含《需求规格说明与技术实施方案.md》的架构资料统一归档至 `docs/`。
+This guide helps contributors work consistently in this Go gateway monolith. Please follow the structure, commands, and conventions below when adding or modifying code.
 
-## 构建测试与开发命令
-新增依赖后执行 `go mod tidy`，保持 `go.mod` 与 `go.sum` 同步。使用 `go build ./cmd/gateway` 生成二进制。快速联调可运行 `docker compose -f deploy/docker-compose.yml up gateway`，一次性拉起 Redis、PostgreSQL 及网关。常规测试执行 `go test ./...`，聚焦排查可加 `-run TestProxy`。在提交前运行 `golangci-lint run ./...`（规则见 `.golangci.yml`）以捕捉潜在回归。
+## Project Structure & Module Organization
+- `cmd/gateway/main.go` — service entrypoint.
+- `internal/proxy` — core proxy pipeline and forwarding logic.
+- `internal/admin` — admin/management APIs.
+- `pkg/` — shared rule definitions, persistence models, metrics/monitoring.
+- `testdata/` — integration scenarios; `testdata/stream/` holds streaming golden files.
+- `web/admin/` — static admin UI assets.
+- `deploy/` — container assets (`Dockerfile`, `docker-compose.yml`).
+- `docs/` — architecture docs, including `需求规格说明与技术实施方案.md`.
 
-## 代码风格与命名规范
-提交前使用 `gofmt` 或 `gofumpt` 自动格式化，CI 会阻挡未格式化代码。命名遵循 Go 惯例，例如 `RuleMatcher`、`NewProxy`。单文件建议控制在 400 行以内，针对复杂逻辑（如流式转发管线）补充包级注释。YAML、JSON 配置统一使用两个空格缩进；若引入 React 管理端，遵循 ESLint + Prettier 统一风格。
+## Build, Test, and Development Commands
+- `go mod tidy` — sync `go.mod`/`go.sum` after dependency changes.
+- `go build ./cmd/gateway` — build the gateway binary.
+- `docker compose -f deploy/docker-compose.yml up gateway` — run gateway with Redis and PostgreSQL.
+- `docker compose -f deploy/docker-compose.monitoring.yml up` — launch gateway + Prometheus + Grafana stack for observability testing.
+- `go test ./...` — run all tests; focus with `-run TestProxy` when needed.
+- `golangci-lint run ./...` — lint per `.golangci.yml` rules.
+- `make verify` — start docker compose, hit health/metrics endpoints, and run SSE regression.
+- CI pipeline & monitoring docs: see `docs/ci.md`, `docs/monitoring.md`, and the sample Grafana dashboard at `docs/grafana-dashboard.json`.
 
-## 测试规范
-基于 Go `testing` 标准库，配合 `testify` 断言提升可读性。测试命名采用 `Test<组件>_<场景>`（如 `TestRuleEngine_MatchesHeaders`）。流式响应的黄金文件放置在 `testdata/stream/`。`internal/proxy` 与 `internal/rules` 需保持至少 80% 的覆盖率；集成测试置于 `internal/integration_test`，通过 `-tags compose_test` 启动 Docker 依赖。
+## Coding Style & Naming Conventions
+- Format with `gofmt` or `gofumpt`; CI enforces formatting.
+- Follow Go naming (e.g., `RuleMatcher`, `NewProxy`).
+- Keep single files ≤ 400 lines; add package-level comments for complex flows.
+- YAML/JSON use two-space indentation.
+- If a React admin is introduced, use ESLint + Prettier for consistency.
 
-## 提交与合并请求指引
-遵循 Conventional Commits，如 `feat: add redis-backed rule cache`，便于自动生成变更日志。每个 PR 需说明影响范围、测试方式、关联需求条目，并提供管理后台改动的截图及配置迁移说明。合并前请邀请 CODEOWNERS 列表中的责任人评审。
+## Testing Guidelines
+- Use Go `testing` with `testify` assertions.
+- Name tests `Test<Component>_<Scenario>` (e.g., `TestRuleEngine_MatchesHeaders`).
+- Maintain ≥80% coverage for `internal/proxy` and `internal/rules`.
+- Integration tests in `internal/integration_test`; run with `-tags compose_test` to start Docker deps.
 
-## 安全与配置注意事项
-严禁在 Git 中提交密钥，开发环境使用 `.env.local` 并通过 Docker Compose 覆盖加载。定期轮换上游 API Key，并在计划中的配置服务中以加密形式存储。引入新依赖时，在 `docs/security.md` 记录威胁评估与缓解措施。
+## Commit & Pull Request Guidelines
+- Use Conventional Commits (e.g., `feat: add redis-backed rule cache`).
+- PRs must describe impact scope, testing approach, linked requirement items, screenshots for admin changes, and config migration notes.
+- Request review from CODEOWNERS before merge.
+
+## Security & Configuration Tips
+- Do not commit secrets. Use `.env.local` (copy from `.env.local.example`) and Docker Compose overrides for dev; generate strong admin credentials per environment.
+- Rotate upstream API keys regularly; store config securely (planned encrypted config service).
+- For new dependencies, record threat assessment and mitigations in `docs/security.md`.

@@ -19,6 +19,7 @@ import (
 	"github.com/tidwall/sjson"
 
 	"github.com/prehisle/yapi/internal/middleware"
+	"github.com/prehisle/yapi/pkg/metrics"
 	"github.com/prehisle/yapi/pkg/rules"
 )
 
@@ -74,6 +75,7 @@ func NewHandler(service rules.Service, opts ...Option) *Handler {
 	if h.logger == nil {
 		h.logger = slog.Default()
 	}
+	h.transport = wrapWithMetricsTransport(h.transport)
 	return h
 }
 
@@ -344,4 +346,33 @@ func (r *responseRecorder) Write(b []byte) (int, error) {
 	n, err := r.ResponseWriter.Write(b)
 	r.bytes += int64(n)
 	return n, err
+}
+
+type metricsRoundTripper struct {
+	base http.RoundTripper
+}
+
+func wrapWithMetricsTransport(base http.RoundTripper) http.RoundTripper {
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	if _, ok := base.(*metricsRoundTripper); ok {
+		return base
+	}
+	return &metricsRoundTripper{base: base}
+}
+
+func (m *metricsRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if m.base == nil {
+		m.base = http.DefaultTransport
+	}
+	start := time.Now()
+	resp, err := m.base.RoundTrip(req)
+	duration := time.Since(start)
+	status := 0
+	if resp != nil {
+		status = resp.StatusCode
+	}
+	metrics.ObserveUpstream(req.URL.Host, status, duration, err != nil)
+	return resp, err
 }
