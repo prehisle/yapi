@@ -1,8 +1,5 @@
 run:
   timeout: 5m
-  skip-dirs:
-    - web/admin
-    - testdata
 linters:
   enable:
     - govet
@@ -12,6 +9,9 @@ linters:
     - errcheck
     - staticcheck
 issues:
+  exclude-dirs:
+    - web/admin
+    - testdata
   exclude-rules:
     - path: _test\.go
       linters:
