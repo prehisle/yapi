@@ -26,6 +26,7 @@ services:
       UPSTREAM_BASE_URL: "https://api.openai.com"
       DATABASE_DSN: "postgres://yapi:yapi@postgres:5432/yapi?sslmode=disable"
       REDIS_ADDR: "redis:6379"
+      REDIS_CHANNEL: "rules:sync"
     ports:
       - "8080:8080"
     depends_on:

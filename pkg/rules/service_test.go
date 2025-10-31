@@ -12,6 +12,7 @@ import (
 func TestService_UpsertAndList(t *testing.T) {
 	store := rules.NewMemoryStore()
 	svc := rules.NewService(store)
+	svc.StartBackgroundSync(context.Background())
 
 	ruleA := rules.Rule{
 		ID:       "rule-a",
@@ -36,6 +37,11 @@ func TestService_UpsertAndList(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rulesList, 2)
 	require.Equal(t, "rule-a", rulesList[0].ID)
+
+	rulesList[0].Actions.SetHeaders = map[string]string{"X-Debug": "true"}
+	nextList, err := svc.ListRules(ctx)
+	require.NoError(t, err)
+	require.Nil(t, nextList[0].Actions.SetHeaders)
 
 	got, err := svc.GetRule(ctx, "rule-b")
 	require.NoError(t, err)

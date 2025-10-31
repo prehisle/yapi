@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"log"
 	"net/http"
 	"net/url"
@@ -11,9 +13,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"github.com/prehisle/yapi/internal/admin"
 	"github.com/prehisle/yapi/internal/proxy"
+	"github.com/prehisle/yapi/pkg/config"
 	"github.com/prehisle/yapi/pkg/rules"
 )
 
@@ -21,26 +28,54 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	gin.SetMode(gin.ReleaseMode)
-	router := gin.New()
-	router.Use(gin.Recovery())
+	cfg := config.Load()
 
-	ruleStore := rules.NewMemoryStore()
-	ruleService := rules.NewService(ruleStore)
+	store, dbCloser := setupStore(ctx, cfg)
+	defer func() {
+		if dbCloser != nil {
+			if err := dbCloser(); err != nil {
+				log.Printf("database close error: %v", err)
+			}
+		}
+	}()
+
+	redisClient, cache, eventBus := setupRedis(ctx, cfg)
+	if redisClient != nil {
+		defer func() {
+			if err := redisClient.Close(); err != nil {
+				log.Printf("redis close error: %v", err)
+			}
+		}()
+	}
+
+	var serviceOpts []rules.ServiceOption
+	if cache != nil {
+		serviceOpts = append(serviceOpts, rules.WithCache(cache))
+	}
+	if eventBus != nil {
+		serviceOpts = append(serviceOpts, rules.WithEventBus(eventBus))
+	}
+
+	ruleService := rules.NewService(store, serviceOpts...)
+	ruleService.StartBackgroundSync(ctx)
 
 	if err := seedDefaultRule(ctx, ruleService); err != nil {
 		log.Printf("failed to seed default rule: %v", err)
 	}
 
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.New()
+	router.Use(gin.Recovery())
+
 	adminHandler := admin.NewHandler(ruleService)
 	admin.RegisterRoutes(router.Group("/admin"), adminHandler)
 
-	defaultTarget := mustParseURL(os.Getenv("UPSTREAM_BASE_URL"))
+	defaultTarget := mustParseURL(cfg.UpstreamBaseURL)
 	proxyHandler := proxy.NewHandler(ruleService, proxy.WithDefaultTarget(defaultTarget))
 	proxy.RegisterRoutes(router.Group(""), proxyHandler)
 
 	server := &http.Server{
-		Addr:              ":" + serverPort(),
+		Addr:              ":" + cfg.GatewayPort,
 		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -58,13 +93,6 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}
-}
-
-func serverPort() string {
-	if port := os.Getenv("GATEWAY_PORT"); port != "" {
-		return port
-	}
-	return "8080"
 }
 
 func mustParseURL(raw string) *url.URL {
@@ -91,5 +119,59 @@ func seedDefaultRule(ctx context.Context, svc rules.Service) error {
 		},
 		Enabled: false,
 	}
+	_, err := svc.GetRule(ctx, defaultRule.ID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, rules.ErrRuleNotFound) {
+		return err
+	}
 	return svc.UpsertRule(ctx, defaultRule)
+}
+
+func setupStore(ctx context.Context, cfg config.Config) (rules.Store, func() error) {
+	if cfg.DatabaseDSN == "" {
+		return rules.NewMemoryStore(), nil
+	}
+	gormLogger := logger.New(log.New(os.Stdout, "gorm: ", log.LstdFlags), logger.Config{
+		SlowThreshold: time.Second,
+		LogLevel:      logger.Warn,
+	})
+	db, err := gorm.Open(postgres.Open(cfg.DatabaseDSN), &gorm.Config{
+		Logger: gormLogger,
+	})
+	if err != nil {
+		log.Fatalf("failed to connect database: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("failed to get database connection: %v", err)
+	}
+	configureSQLDB(sqlDB)
+
+	store := rules.NewDBStore(db)
+	if err := store.AutoMigrate(ctx); err != nil {
+		log.Fatalf("database migration failed: %v", err)
+	}
+	return store, sqlDB.Close
+}
+
+func configureSQLDB(db *sql.DB) {
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(30 * time.Minute)
+}
+
+func setupRedis(ctx context.Context, cfg config.Config) (*redis.Client, rules.Cache, rules.EventBus) {
+	client := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := client.Ping(pingCtx).Err(); err != nil {
+		log.Printf("redis ping failed, fallback to in-memory cache: %v", err)
+		_ = client.Close()
+		return nil, nil, nil
+	}
+	cache := rules.NewRedisCache(client, "rules:all", 0)
+	eventBus := rules.NewRedisEventBus(client, cfg.RedisChannel)
+	return client, cache, eventBus
 }

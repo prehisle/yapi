@@ -7,7 +7,7 @@ LLM 智能代理网关的 Go 实现，提供统一入口、动态规则路由和
 - `cmd/gateway/`：网关服务入口，负责启动 HTTP 服务与路由挂载。
 - `internal/proxy/`：核心代理逻辑，基于规则匹配请求并转发至上游。
 - `internal/admin/`：后台管理接口，提供规则 CRUD 和健康检查。
-- `pkg/rules/`：规则模型、验证逻辑以及默认的内存存储实现。
+- `pkg/rules/`：规则模型、验证逻辑，包含 PostgreSQL 存储、Redis 缓存与事件通知实现。
 - `deploy/`：容器化与本地集成环境定义（`Dockerfile`、`docker-compose.yml`）。
 - `docs/`：《需求规格说明与技术实施方案》等架构文档归档目录。
 - `testdata/`：后续用于存放黄金文件与集成测试场景。
@@ -28,10 +28,21 @@ LLM 智能代理网关的 Go 实现，提供统一入口、动态规则路由和
    docker compose -f deploy/docker-compose.yml up gateway
    ```
 
-环境变量：
-- `GATEWAY_PORT`（默认 `8080`）
-- `UPSTREAM_BASE_URL`（默认无，需结合规则配置）
-- `DATABASE_DSN`、`REDIS_ADDR` 预留给后续持久化与缓存实现。
+首次运行建议复制环境变量模板并按需调整：
+```bash
+cp .env.example .env.local
+```
+
+## 配置说明
+
+核心环境变量（详见 `.env.example`）：
+- `GATEWAY_PORT`：HTTP 服务监听端口，默认为 `8080`。
+- `UPSTREAM_BASE_URL`：兜底上游地址，可为空，具体路由由规则决定。
+- `DATABASE_DSN`：PostgreSQL 连接串，用于规则持久化（示例：`postgres://user:pass@host:5432/db?sslmode=disable`）。
+- `REDIS_ADDR`：Redis 地址，默认 `localhost:6379`，用于缓存规则与发布刷新事件。
+- `REDIS_CHANNEL`：规则变更通知频道，默认 `rules:sync`。
+
+服务启动时会自动执行规则表结构迁移，并在无法连接 Redis 时退化为单实例内存缓存。
 
 ## 开发规范
 
@@ -42,6 +53,6 @@ LLM 智能代理网关的 Go 实现，提供统一入口、动态规则路由和
 
 ## 下一步路线
 
-- 接入 PostgreSQL + Redis 的规则存储与缓存，实现 Pub/Sub 热更新。
-- 扩展代理匹配器与动作，完善 Header/Body 重写能力。
-- 搭建 Web 管理后台 UI，并补充权限、审计等安全措施。
+- 扩展代理匹配器与动作，支持请求体重写、鉴权注入等高级场景。
+- 构建 Web 管理后台 UI，补充角色权限、操作审计能力。
+- 接入系统监控（Prometheus 指标、结构化日志）与链路追踪。
