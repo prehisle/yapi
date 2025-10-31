@@ -39,3 +39,6 @@
 - Never commit secrets; use `.env.local` sourced from `.env.local.example`.
 - Rotate upstream API keys and document mitigations for new dependencies in `docs/security.md`.
 - Store environment credentials securely and prefer Docker Compose overrides for local overrides.
+
+## Agent-Specific Instructions
+- 与用户交互时始终使用中文回复，包括讨论代码、测试结果或提交建议。
