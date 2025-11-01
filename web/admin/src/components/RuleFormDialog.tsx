@@ -16,6 +16,13 @@ type FormValues = {
   priority: string
   pathPrefix: string
   methods: string
+  apiKeyIDs: string
+  apiKeyPrefixes: string
+  userIDs: string
+  userMetadata: string
+  bindingUpstreamIDs: string
+  bindingProviders: string
+  requireBinding: boolean
   targetURL: string
   enabled: boolean
   setHeaders: string
@@ -33,6 +40,13 @@ const defaultValues: FormValues = {
   priority: '',
   pathPrefix: '',
   methods: '',
+  apiKeyIDs: '',
+  apiKeyPrefixes: '',
+  userIDs: '',
+  userMetadata: '',
+  bindingUpstreamIDs: '',
+  bindingProviders: '',
+  requireBinding: false,
   targetURL: '',
   enabled: true,
   setHeaders: '',
@@ -48,6 +62,11 @@ const stringifyRecord = (record?: Record<string, string>) => {
   return Object.entries(record)
     .map(([key, value]) => `${key}=${value}`)
     .join('\n')
+}
+
+const stringifyList = (items?: string[]) => {
+  if (!items || items.length === 0) return ''
+  return items.join('\n')
 }
 
 const stringifyJSON = (record?: Record<string, unknown>) => {
@@ -102,6 +121,13 @@ const ruleToValues = (rule: Rule): FormValues => ({
   priority: String(rule.priority),
   pathPrefix: rule.matcher.path_prefix ?? '',
   methods: rule.matcher.methods?.join(', ') ?? '',
+  apiKeyIDs: stringifyList(rule.matcher.api_key_ids),
+  apiKeyPrefixes: stringifyList(rule.matcher.api_key_prefixes),
+  userIDs: stringifyList(rule.matcher.user_ids),
+  userMetadata: stringifyRecord(rule.matcher.user_metadata),
+  bindingUpstreamIDs: stringifyList(rule.matcher.binding_upstream_ids),
+  bindingProviders: stringifyList(rule.matcher.binding_providers),
+  requireBinding: rule.matcher.require_binding ?? false,
   targetURL: rule.actions.set_target_url ?? '',
   enabled: rule.enabled,
   setHeaders: stringifyRecord(rule.actions.set_headers),
@@ -126,6 +152,14 @@ const validate = (values: FormValues): FormErrors => {
     errors.priority = '优先级必须为整数'
   }
 
+  if (values.apiKeyPrefixes.trim()) {
+    const prefixes = parseList(values.apiKeyPrefixes) ?? []
+    const invalid = prefixes.find((prefix) => !/^[A-Za-z0-9]{8}$/.test(prefix))
+    if (invalid) {
+      errors.apiKeyPrefixes = 'API Key 前缀需为 8 位字母或数字'
+    }
+  }
+
   if (values.targetURL.trim()) {
     try {
       new URL(values.targetURL.trim())
@@ -145,6 +179,12 @@ const buildPayload = (values: FormValues): Rule => {
   const removeJSON = parseList(values.removeJSON)
 
   const methods = parseList(values.methods)?.map((method) => method.toUpperCase())
+  const apiKeyIDs = parseList(values.apiKeyIDs)
+  const apiKeyPrefixes = parseList(values.apiKeyPrefixes)
+  const userIDs = parseList(values.userIDs)
+  const userMetadata = parseKeyValueBlock(values.userMetadata, 'user_metadata')
+  const bindingUpstreamIDs = parseList(values.bindingUpstreamIDs)
+  const bindingProviders = parseList(values.bindingProviders)
 
   return {
     id: values.id.trim(),
@@ -153,6 +193,13 @@ const buildPayload = (values: FormValues): Rule => {
     matcher: {
       path_prefix: values.pathPrefix.trim() || undefined,
       methods: methods,
+      api_key_ids: apiKeyIDs,
+      api_key_prefixes: apiKeyPrefixes,
+      user_ids: userIDs,
+      user_metadata: userMetadata,
+      binding_upstream_ids: bindingUpstreamIDs,
+      binding_providers: bindingProviders,
+      require_binding: values.requireBinding || undefined,
     },
     actions: {
       set_target_url: values.targetURL.trim() || undefined,
@@ -301,6 +348,89 @@ export const RuleFormDialog = ({
             />
             <span className="field__label">启用规则</span>
           </label>
+        </section>
+
+        <section className="form-section">
+          <h3 className="form-section__title">账户上下文匹配</h3>
+          <div className="field">
+            <span className="field__label">API Key ID</span>
+            <textarea
+              className="field__textarea"
+              placeholder="逐行填写完整的 API Key ID"
+              value={values.apiKeyIDs}
+              onChange={handleChange('apiKeyIDs')}
+              rows={2}
+            />
+          </div>
+
+          <div className="field">
+            <span className="field__label">API Key 前缀</span>
+            <textarea
+              className="field__textarea"
+              placeholder="逐行填写 8 位前缀，例如 abcd1234"
+              value={values.apiKeyPrefixes}
+              onChange={handleChange('apiKeyPrefixes')}
+              rows={2}
+            />
+            {errors.apiKeyPrefixes ? <p className="field__error">{errors.apiKeyPrefixes}</p> : null}
+          </div>
+
+          <div className="field">
+            <span className="field__label">用户 ID</span>
+            <textarea
+              className="field__textarea"
+              placeholder="逐行填写用户 ID"
+              value={values.userIDs}
+              onChange={handleChange('userIDs')}
+              rows={2}
+            />
+          </div>
+
+          <div className="field">
+            <span className="field__label">用户元数据匹配</span>
+            <textarea
+              className="field__textarea"
+              placeholder={`key=value\nregion=eu-west-1`}
+              value={values.userMetadata}
+              onChange={handleChange('userMetadata')}
+              rows={3}
+            />
+            <span className="field__hint">需要与用户 Metadata 完全匹配对应键值。</span>
+          </div>
+
+          <div className="field">
+            <span className="field__label">上游凭据 ID</span>
+            <textarea
+              className="field__textarea"
+              placeholder="逐行填写上游凭据 ID"
+              value={values.bindingUpstreamIDs}
+              onChange={handleChange('bindingUpstreamIDs')}
+              rows={2}
+            />
+          </div>
+
+          <div className="field">
+            <span className="field__label">上游 Provider</span>
+            <textarea
+              className="field__textarea"
+              placeholder="逐行填写 Provider 标识，例如 openai"
+              value={values.bindingProviders}
+              onChange={handleChange('bindingProviders')}
+              rows={2}
+            />
+          </div>
+
+          <label className="field field--inline">
+            <input
+              type="checkbox"
+              checked={values.requireBinding}
+              onChange={handleChange('requireBinding')}
+            />
+            <span className="field__label">仅在存在上游绑定时匹配</span>
+          </label>
+          <span className="field__hint">
+            启用后，若请求未解析出 API Key 绑定信息，则不会命中该规则。
+          </span>
         </section>
 
         <section className="form-section">

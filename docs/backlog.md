@@ -12,6 +12,9 @@
 | FR-08 | Apply rule priority resolution | Medium | Bob (Platform) | 1d |
 | FR-09 | Allow optional JSON body mutation before forward | Medium | Chen (Integration) | 2d |
 | FR-10 | Research sandboxed JavaScript action support via goja | Low | Eva (R&D) | 3d |
+| FR-14 | Extend rule matcher with API key / user / upstream context filters | High | Bob (Platform) | 4d |
+| FR-15 | Update admin UI to configure advanced matcher fields | High | Diana (Admin UI) | 3d |
+| FR-16 | Add regression tests for account-aware routing rules | Medium | Chen (Integration) | 3d |
 | NFR-03 | Add admin auth + secret management flow | High | Frank (Security) | 3d |
 | NFR-05 | Expose metrics/logging for observability | Medium | Grace (Observability) | 2d |
 

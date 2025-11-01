@@ -27,9 +27,16 @@ type Rule struct {
 
 // Matcher 描述了匹配客户端请求的条件。
 type Matcher struct {
-	PathPrefix string            `json:"path_prefix,omitempty"`
-	Methods    []string          `json:"methods,omitempty"`
-	Headers    map[string]string `json:"headers,omitempty"`
+	PathPrefix         string            `json:"path_prefix,omitempty"`
+	Methods            []string          `json:"methods,omitempty"`
+	Headers            map[string]string `json:"headers,omitempty"`
+	APIKeyIDs          []string          `json:"api_key_ids,omitempty"`
+	APIKeyPrefixes     []string          `json:"api_key_prefixes,omitempty"`
+	UserIDs            []string          `json:"user_ids,omitempty"`
+	UserMetadata       map[string]string `json:"user_metadata,omitempty"`
+	BindingUpstreamIDs []string          `json:"binding_upstream_ids,omitempty"`
+	BindingProviders   []string          `json:"binding_providers,omitempty"`
+	RequireBinding     bool              `json:"require_binding,omitempty"`
 }
 
 // Actions 表示命中的规则执行的操作。
@@ -80,6 +87,46 @@ func validateMatcher(m Matcher) error {
 	for key := range m.Headers {
 		if strings.TrimSpace(key) == "" {
 			return fmt.Errorf("%w: header key must not be empty", ErrInvalidRule)
+		}
+	}
+	for i, id := range m.APIKeyIDs {
+		if trimmed := strings.TrimSpace(id); trimmed == "" {
+			return fmt.Errorf("%w: api_key_ids[%d] must not be empty", ErrInvalidRule, i)
+		}
+	}
+	prefixPattern := regexp.MustCompile(`^[A-Za-z0-9]{8}$`)
+	for i, prefix := range m.APIKeyPrefixes {
+		trimmed := strings.TrimSpace(prefix)
+		if trimmed == "" {
+			return fmt.Errorf("%w: api_key_prefixes[%d] must not be empty", ErrInvalidRule, i)
+		}
+		if !prefixPattern.MatchString(trimmed) {
+			return fmt.Errorf("%w: api_key_prefixes[%d] must be 8 alphanumeric characters", ErrInvalidRule, i)
+		}
+	}
+	for i, id := range m.UserIDs {
+		if trimmed := strings.TrimSpace(id); trimmed == "" {
+			return fmt.Errorf("%w: user_ids[%d] must not be empty", ErrInvalidRule, i)
+		}
+	}
+	for key, value := range m.UserMetadata {
+		keyTrimmed := strings.TrimSpace(key)
+		valueTrimmed := strings.TrimSpace(value)
+		if keyTrimmed == "" {
+			return fmt.Errorf("%w: user_metadata key must not be empty", ErrInvalidRule)
+		}
+		if valueTrimmed == "" {
+			return fmt.Errorf("%w: user_metadata[%q] value must not be empty", ErrInvalidRule, key)
+		}
+	}
+	for i, id := range m.BindingUpstreamIDs {
+		if trimmed := strings.TrimSpace(id); trimmed == "" {
+			return fmt.Errorf("%w: binding_upstream_ids[%d] must not be empty", ErrInvalidRule, i)
+		}
+	}
+	for i, provider := range m.BindingProviders {
+		if trimmed := strings.TrimSpace(provider); trimmed == "" {
+			return fmt.Errorf("%w: binding_providers[%d] must not be empty", ErrInvalidRule, i)
 		}
 	}
 	return nil

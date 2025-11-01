@@ -13,7 +13,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 
+	"github.com/prehisle/yapi/internal/middleware"
+	"github.com/prehisle/yapi/pkg/accounts"
 	"github.com/prehisle/yapi/pkg/rules"
 )
 
@@ -145,3 +148,99 @@ func TestHandler_StreamPassthrough(t *testing.T) {
 	require.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
 	require.Equal(t, strings.Join(chunks, ""), string(body))
 }
+
+func TestHandler_MatchRule_WithAccountMatchers(t *testing.T) {
+	accountRule := rules.Rule{
+		ID:       "account-specific",
+		Priority: 100,
+		Enabled:  true,
+		Matcher: rules.Matcher{
+			PathPrefix:         "/v1",
+			RequireBinding:     true,
+			APIKeyPrefixes:     []string{"abcd1234"},
+			UserIDs:            []string{"user-1"},
+			UserMetadata:       map[string]string{"tier": "gold"},
+			BindingUpstreamIDs: []string{"cred-1"},
+			BindingProviders:   []string{"openai"},
+		},
+		Actions: rules.Actions{
+			SetTargetURL: "https://upstream.example.com",
+		},
+	}
+	fallbackRule := rules.Rule{
+		ID:       "fallback",
+		Priority: 10,
+		Enabled:  true,
+		Matcher: rules.Matcher{
+			PathPrefix: "/v1",
+		},
+		Actions: rules.Actions{
+			SetTargetURL: "https://fallback.example.com",
+		},
+	}
+	svc := &ruleServiceStub{
+		rules: []rules.Rule{accountRule, fallbackRule},
+	}
+	h := NewHandler(svc)
+
+	t.Run("matches account aware rule when context satisfies", func(t *testing.T) {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		req, err := http.NewRequest(http.MethodGet, "/v1/chat", nil)
+		require.NoError(t, err)
+		ctx.Request = req
+		ctx.Set("auth_api_key", accounts.APIKey{ID: "key-1", UserID: "user-1", Prefix: "abcd1234"})
+		ctx.Set("auth_raw_api_key", "yapi_abcd1234_secretvalue")
+		ctx.Set("auth_user", accounts.User{ID: "user-1", Metadata: datatypes.JSONMap{"tier": "gold"}})
+		ctx.Set("auth_binding", accounts.UserAPIKeyBinding{
+			ID:                   "binding-1",
+			UserID:               "user-1",
+			UserAPIKeyID:         "key-1",
+			UpstreamCredentialID: "cred-1",
+		})
+		ctx.Set("auth_upstream", middleware.UpstreamInfo{
+			Credential: accounts.UpstreamCredential{
+				ID:       "cred-1",
+				UserID:   "user-1",
+				Provider: "openai",
+			},
+			Endpoints: []string{"https://upstream.example.com"},
+		})
+
+		rule, err := h.matchRule(ctx)
+		require.NoError(t, err)
+		require.Equal(t, "account-specific", rule.ID)
+	})
+
+	t.Run("falls back when account context missing", func(t *testing.T) {
+		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+		req, err := http.NewRequest(http.MethodGet, "/v1/chat", nil)
+		require.NoError(t, err)
+		ctx.Request = req
+
+		rule, err := h.matchRule(ctx)
+		require.NoError(t, err)
+		require.Equal(t, "fallback", rule.ID)
+	})
+}
+
+type ruleServiceStub struct {
+	rules []rules.Rule
+}
+
+func (s *ruleServiceStub) ListRules(ctx context.Context) ([]rules.Rule, error) {
+	return s.rules, nil
+}
+
+func (s *ruleServiceStub) GetRule(ctx context.Context, id string) (rules.Rule, error) {
+	return rules.Rule{}, nil
+}
+
+func (s *ruleServiceStub) UpsertRule(ctx context.Context, rule rules.Rule) error {
+	return nil
+}
+
+func (s *ruleServiceStub) DeleteRule(ctx context.Context, id string) error {
+	return nil
+}
+
+func (s *ruleServiceStub) StartBackgroundSync(ctx context.Context) {}

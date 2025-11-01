@@ -68,6 +68,17 @@ cp .env.example .env.local
 
 > JSON 改写仅在 `Content-Type` 为 `application/json` 时生效，发生错误会在请求头附加 `X-YAPI-Body-Rewrite-Error` 并输出结构化日志（`slog`），便于排查。
 
+## 高级匹配条件
+
+除了基础的路径 / 方法 / 请求头匹配外，规则还可以依据账户上下文进行差异化路由：
+
+- `api_key_ids` / `api_key_prefixes`：仅对指定 API Key（完整 ID 或 8 位前缀）生效。
+- `user_ids`：限制命中用户 ID 列表；`user_metadata` 可校验用户元数据中的键值对。
+- `binding_upstream_ids` / `binding_providers`：根据绑定到的上游凭据 ID 或 Provider 精准路由。
+- `require_binding`：要求请求成功解析出 API Key 绑定信息，否则不会命中该规则。
+
+所有字段均可组合使用，满足多租户或多上游场景下的细粒度控制。详见管理端“规则”页面的“账户上下文匹配”配置分组。
+
 ## 管理 API（简要）
 
 管理端暴露在 `/admin` 路径下，核心接口：

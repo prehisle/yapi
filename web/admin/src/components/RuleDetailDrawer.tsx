@@ -34,6 +34,12 @@ export const RuleDetailDrawer = ({ open, rule, previousRule, onClose }: RuleDeta
   const addHeaders = partitionHeaders(rule.actions.add_headers)
   const removeHeaders = rule.actions.remove_headers ?? []
   const methods = rule.matcher.methods?.join(', ') ?? '所有方法'
+  const apiKeyIDs = rule.matcher.api_key_ids ?? []
+  const apiKeyPrefixes = rule.matcher.api_key_prefixes ?? []
+  const userIDs = rule.matcher.user_ids ?? []
+  const userMetadata = partitionHeaders(rule.matcher.user_metadata)
+  const upstreamIDs = rule.matcher.binding_upstream_ids ?? []
+  const upstreamProviders = rule.matcher.binding_providers ?? []
 
   return (
     <div className="drawer-backdrop" role="dialog" aria-modal>
@@ -76,6 +82,98 @@ export const RuleDetailDrawer = ({ open, rule, previousRule, onClose }: RuleDeta
               <dd>{rule.enabled ? '已启用' : '未启用'}</dd>
             </div>
           </dl>
+        </section>
+
+        <section className="drawer-section">
+          <h3 className="drawer-section__title">账户上下文匹配</h3>
+          <dl className="description-list">
+            <div>
+              <dt>Require Binding</dt>
+              <dd>{rule.matcher.require_binding ? '是' : '否'}</dd>
+            </div>
+          </dl>
+          <div className="drawer-table">
+            <h4>API Key ID</h4>
+            {apiKeyIDs.length > 0 ? (
+              <ul>
+                {apiKeyIDs.map((id) => (
+                  <li key={id}>{id}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="drawer-empty">-</p>
+            )}
+          </div>
+
+          <div className="drawer-table">
+            <h4>API Key 前缀</h4>
+            {apiKeyPrefixes.length > 0 ? (
+              <ul>
+                {apiKeyPrefixes.map((prefix) => (
+                  <li key={prefix}>{prefix}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="drawer-empty">-</p>
+            )}
+          </div>
+
+          <div className="drawer-table">
+            <h4>用户 ID</h4>
+            {userIDs.length > 0 ? (
+              <ul>
+                {userIDs.map((id) => (
+                  <li key={id}>{id}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="drawer-empty">-</p>
+            )}
+          </div>
+
+          <div className="drawer-table">
+            <h4>用户 Metadata</h4>
+            {userMetadata.length > 0 ? (
+              <table>
+                <tbody>
+                  {userMetadata.map((item) => (
+                    <tr key={item.key}>
+                      <td>{item.key}</td>
+                      <td>{item.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="drawer-empty">-</p>
+            )}
+          </div>
+
+          <div className="drawer-table">
+            <h4>上游凭据 ID</h4>
+            {upstreamIDs.length > 0 ? (
+              <ul>
+                {upstreamIDs.map((id) => (
+                  <li key={id}>{id}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="drawer-empty">-</p>
+            )}
+          </div>
+
+          <div className="drawer-table">
+            <h4>上游 Provider</h4>
+            {upstreamProviders.length > 0 ? (
+              <ul>
+                {upstreamProviders.map((provider) => (
+                  <li key={provider}>{provider}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="drawer-empty">-</p>
+            )}
+          </div>
         </section>
 
         <section className="drawer-section">

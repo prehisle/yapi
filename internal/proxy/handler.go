@@ -228,6 +228,69 @@ func matchesRequest(c *gin.Context, matcher rules.Matcher) bool {
 			return false
 		}
 	}
+
+	apiKey, hasAPIKey := middleware.CurrentAPIKey(c)
+	rawKey, _ := middleware.RawAPIKey(c)
+	binding, hasBinding := middleware.CurrentBinding(c)
+	upstreamInfo, hasUpstream := middleware.CurrentUpstreamInfo(c)
+	user, hasUser := middleware.CurrentUser(c)
+	if matcher.RequireBinding {
+		if !hasBinding {
+			return false
+		}
+	}
+	if len(matcher.APIKeyIDs) > 0 {
+		if !hasAPIKey {
+			return false
+		}
+		if !stringInSliceTrimmed(matcher.APIKeyIDs, apiKey.ID, false) {
+			return false
+		}
+	}
+	if len(matcher.APIKeyPrefixes) > 0 {
+		prefix := strings.TrimSpace(apiKey.Prefix)
+		if prefix == "" && rawKey != "" {
+			parts := strings.Split(rawKey, "_")
+			if len(parts) >= 3 {
+				prefix = parts[1]
+			}
+		}
+		if prefix == "" || !stringInSliceTrimmed(matcher.APIKeyPrefixes, prefix, true) {
+			return false
+		}
+	}
+	if len(matcher.UserIDs) > 0 {
+		if !hasUser {
+			return false
+		}
+		if !stringInSliceTrimmed(matcher.UserIDs, user.ID, false) {
+			return false
+		}
+	}
+	if len(matcher.UserMetadata) > 0 {
+		if !hasUser || user.Metadata == nil {
+			return false
+		}
+		if !metadataContains(map[string]any(user.Metadata), matcher.UserMetadata) {
+			return false
+		}
+	}
+	if len(matcher.BindingUpstreamIDs) > 0 {
+		if !hasBinding {
+			return false
+		}
+		if !stringInSliceTrimmed(matcher.BindingUpstreamIDs, binding.UpstreamCredentialID, false) {
+			return false
+		}
+	}
+	if len(matcher.BindingProviders) > 0 {
+		if !hasUpstream {
+			return false
+		}
+		if !stringInSliceTrimmed(matcher.BindingProviders, upstreamInfo.Credential.Provider, true) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -349,6 +412,46 @@ func rewriteJSONBody(req *http.Request, override map[string]any, remove []string
 		req.Header.Set("Content-Length", strconv.Itoa(len(bodyBytes)))
 	}
 	return nil
+}
+
+func stringInSliceTrimmed(list []string, target string, caseInsensitive bool) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, item := range list {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		if caseInsensitive {
+			if strings.EqualFold(trimmed, target) {
+				return true
+			}
+		} else if trimmed == target {
+			return true
+		}
+	}
+	return false
+}
+
+func metadataContains(metadata map[string]any, expected map[string]string) bool {
+	if len(expected) == 0 {
+		return true
+	}
+	if len(metadata) == 0 {
+		return false
+	}
+	for key, value := range expected {
+		actual, ok := metadata[key]
+		if !ok {
+			return false
+		}
+		if strings.TrimSpace(fmt.Sprint(actual)) != strings.TrimSpace(value) {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *Handler) authorizeBinding(c *gin.Context, binding accounts.UserAPIKeyBinding, upstream middleware.UpstreamInfo) error {

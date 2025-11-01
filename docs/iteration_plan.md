@@ -45,8 +45,9 @@ Deliver a functional proxy that forwards streaming requests with declarative rul
 - ⏳ 账户与上游管理相关的负载与缓存策略（API Key 缓存、速率限制）尚未落地，待后续迭代。
 - ✅ 已通过 `ADMIN_ALLOWED_ORIGINS` 与 `deploy/nginx/accounts.conf` 示例同步账户 API 的 CORS 白名单策略，并在 `docs/security.md` 记录部署指引。
 - ✅ `internal/integration_test/gateway_compose_test.go` 新增异常路径覆盖绑定缺失、密钥吊销等场景，`go test -tags compose_test` 已通过。
+- 🚧 规则匹配尚无法识别用户/密钥上下文，需要扩展 matcher 支持 API Key、用户元数据与上游凭据过滤，以满足差异化路由需求。
 
 ### 即刻推进事项
-- 管理端单元测试：为 `internal/admin/handler.go` 新增的用户、API Key、上游凭据处理器补齐单元测试，防止回归。
-- 账户缓存 / 限流方案：明确缓存命中策略、Redis 结构与速率限制指标，规划实现路径。
-- 运维文档：将 `gateway_admin_actions_total` 等新指标补充到监控/运维手册，指导运营团队观测管理操作。
+- 规则匹配扩展：设计并落地 matcher 新字段（API Key 前缀/ID、用户 ID、用户元数据、上游凭据 ID/Provider、require_binding），完成后端校验与代理匹配逻辑。
+- 管理端更新：为规则编辑/详情页添加新匹配字段的配置入口与校验提示，保证 JSON 结构双向解析。
+- 集成与验证：补充单元测试与 compose 集成测试，覆盖不同密钥命中不同规则的场景；更新文档描述与升级指引。

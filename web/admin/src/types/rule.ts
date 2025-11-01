@@ -2,6 +2,13 @@ export interface RuleMatcher {
   path_prefix?: string
   methods?: string[]
   headers?: Record<string, string>
+  api_key_ids?: string[]
+  api_key_prefixes?: string[]
+  user_ids?: string[]
+  user_metadata?: Record<string, string>
+  binding_upstream_ids?: string[]
+  binding_providers?: string[]
+  require_binding?: boolean
 }
 
 export interface RewritePathExpression {
