@@ -194,6 +194,12 @@ a {
   border: 1px solid #fecdca;
 }
 
+.alert--info {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid rgba(37, 99, 235, 0.35);
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -553,4 +559,77 @@ a {
   color: inherit;
   font-size: 18px;
   cursor: pointer;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+}
+
+.app-header {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.app-header__inner {
+  margin: 0 auto;
+  max-width: 1200px;
+  padding: 20px 32px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.app-header__title {
+  font-size: 20px;
+  margin: 0;
+  color: #0f172a;
+}
+
+.app-header__subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.app-nav {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
+  margin-right: 24px;
+}
+
+.app-nav__link {
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  color: #475569;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.app-nav__link:hover {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
+.app-nav__link--active {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.app-main {
+  flex: 1;
+  padding: 32px;
+}
+
+.page + .page {
+  margin-top: 32px;
+}
+
+.table__row--active {
+  background: rgba(59, 130, 246, 0.08);
 }

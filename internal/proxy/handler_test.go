@@ -41,7 +41,9 @@ func TestApplyRuleActions_ModifyJSONAndHeaders(t *testing.T) {
 	}
 
 	h := &Handler{}
-	err = h.applyRuleActions(req, rules.Rule{ID: "rule-a", Actions: actions})
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = req
+	err = h.applyRuleActions(ctx, req, rules.Rule{ID: "rule-a", Actions: actions})
 	require.NoError(t, err)
 
 	require.Equal(t, "Bearer xyz", req.Header.Get("Authorization"))
@@ -90,7 +92,9 @@ func TestApplyRuleActions_NonJSONBody(t *testing.T) {
 	}
 
 	h := &Handler{}
-	err = h.applyRuleActions(req, rules.Rule{ID: "rule-non-json", Actions: actions})
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = req
+	err = h.applyRuleActions(ctx, req, rules.Rule{ID: "rule-non-json", Actions: actions})
 	require.Error(t, err)
 }
 

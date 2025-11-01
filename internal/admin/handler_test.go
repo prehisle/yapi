@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/prehisle/yapi/pkg/accounts"
 	"github.com/prehisle/yapi/pkg/rules"
 )
 
@@ -45,6 +46,50 @@ func (s *serviceStub) DeleteRule(ctx context.Context, id string) error {
 		return s.deleteFn(ctx, id)
 	}
 	return nil
+}
+
+func (s *serviceStub) CreateUser(ctx context.Context, params accounts.CreateUserParams) (accounts.User, error) {
+	return accounts.User{}, ErrAccountsUnavailable
+}
+
+func (s *serviceStub) ListUsers(ctx context.Context) ([]accounts.User, error) {
+	return nil, ErrAccountsUnavailable
+}
+
+func (s *serviceStub) DeleteUser(ctx context.Context, id string) error {
+	return ErrAccountsUnavailable
+}
+
+func (s *serviceStub) CreateUserAPIKey(ctx context.Context, params accounts.CreateAPIKeyParams) (accounts.APIKey, string, error) {
+	return accounts.APIKey{}, "", ErrAccountsUnavailable
+}
+
+func (s *serviceStub) ListUserAPIKeys(ctx context.Context, userID string) ([]accounts.APIKey, error) {
+	return nil, ErrAccountsUnavailable
+}
+
+func (s *serviceStub) RevokeUserAPIKey(ctx context.Context, apiKeyID string) error {
+	return ErrAccountsUnavailable
+}
+
+func (s *serviceStub) CreateUpstreamCredential(ctx context.Context, params accounts.CreateUpstreamCredentialParams) (accounts.UpstreamCredential, error) {
+	return accounts.UpstreamCredential{}, ErrAccountsUnavailable
+}
+
+func (s *serviceStub) ListUpstreamCredentials(ctx context.Context, userID string) ([]accounts.UpstreamCredential, error) {
+	return nil, ErrAccountsUnavailable
+}
+
+func (s *serviceStub) DeleteUpstreamCredential(ctx context.Context, credentialID string) error {
+	return ErrAccountsUnavailable
+}
+
+func (s *serviceStub) BindAPIKey(ctx context.Context, params accounts.BindAPIKeyParams) (accounts.UserAPIKeyBinding, error) {
+	return accounts.UserAPIKeyBinding{}, ErrAccountsUnavailable
+}
+
+func (s *serviceStub) GetBindingByAPIKeyID(ctx context.Context, apiKeyID string) (accounts.UserAPIKeyBinding, accounts.UpstreamCredential, error) {
+	return accounts.UserAPIKeyBinding{}, accounts.UpstreamCredential{}, ErrAccountsUnavailable
 }
 
 func TestHandler_ListRules(t *testing.T) {

@@ -192,10 +192,7 @@ const RulesPage = () => {
           <button className="button" onClick={openCreateDialog}>
             新建规则
           </button>
-          <button className="button button--ghost" onClick={logout}>
-            退出登录
-          </button>
-          <button className="button" onClick={handleRefresh} disabled={loading}>
+          <button className="button button--ghost" onClick={handleRefresh} disabled={loading}>
             {loading ? '刷新中...' : '刷新'}
           </button>
         </div>

@@ -77,7 +77,7 @@ type UpstreamCredential struct {
 	UserID     string            `gorm:"type:char(36);index"`
 	Provider   string            `gorm:"type:varchar(64);index"`
 	Label      string            `gorm:"type:varchar(128)"`
-	APIKeyHash string            `gorm:"type:varchar(255)"`
+	APIKey     string            `gorm:"type:varchar(255)"`
 	Endpoints  datatypes.JSON    `gorm:"type:jsonb"`
 	Metadata   datatypes.JSONMap `gorm:"type:jsonb"`
 	CreatedAt  time.Time
@@ -99,8 +99,8 @@ func (c UpstreamCredential) Validate() error {
 	if len(c.Label) > maxNameLength {
 		return fmt.Errorf("%w: upstream credential label too long", ErrInvalidInput)
 	}
-	if strings.TrimSpace(c.APIKeyHash) == "" {
-		return fmt.Errorf("%w: upstream credential secret hash empty", ErrInvalidInput)
+	if strings.TrimSpace(c.APIKey) == "" {
+		return fmt.Errorf("%w: upstream credential api key empty", ErrInvalidInput)
 	}
 	return nil
 }

@@ -65,8 +65,10 @@ func main() {
 		serviceOpts = append(serviceOpts, rules.WithEventBus(eventBus))
 	}
 
+	var accountService accounts.Service
 	if db != nil {
-		if err := accounts.NewService(db).AutoMigrate(ctx); err != nil {
+		accountService = accounts.NewService(db)
+		if err := accountService.AutoMigrate(ctx); err != nil {
 			log.Fatalf("accounts migration failed: %v", err)
 		}
 	}
@@ -82,10 +84,13 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID(), middleware.AccessLogger(logger))
+	if accountService != nil {
+		router.Use(middleware.APIKeyAuth(accountService))
+	}
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	adminAuth := admin.NewAuthenticator(cfg.AdminUsername, cfg.AdminPassword, cfg.AdminTokenSecret, cfg.AdminTokenTTL)
-	adminService := admin.NewService(ruleService)
+	adminService := admin.NewService(ruleService, accountService)
 	adminHandler := admin.NewHandler(adminService, adminAuth, admin.WithLogger(logger))
 	adminGroup := router.Group("/admin")
 	admin.RegisterPublicRoutes(adminGroup, adminHandler)
@@ -94,7 +99,14 @@ func main() {
 	admin.RegisterProtectedRoutes(protected, adminHandler)
 
 	defaultTarget := mustParseURL(cfg.UpstreamBaseURL)
-	proxyHandler := proxy.NewHandler(ruleService, proxy.WithDefaultTarget(defaultTarget), proxy.WithLogger(logger))
+	proxyOptions := []proxy.Option{
+		proxy.WithDefaultTarget(defaultTarget),
+		proxy.WithLogger(logger),
+	}
+	if accountService != nil {
+		proxyOptions = append(proxyOptions, proxy.WithAccountsService(accountService))
+	}
+	proxyHandler := proxy.NewHandler(ruleService, proxyOptions...)
 	proxy.RegisterRoutes(router, proxyHandler)
 
 	server := &http.Server{

@@ -19,6 +19,7 @@ import (
 	"github.com/tidwall/sjson"
 
 	"github.com/prehisle/yapi/internal/middleware"
+	"github.com/prehisle/yapi/pkg/accounts"
 	"github.com/prehisle/yapi/pkg/metrics"
 	"github.com/prehisle/yapi/pkg/rules"
 )
@@ -28,10 +29,11 @@ var ErrNoMatchingRule = errors.New("no matching rule")
 
 // Handler 负责根据规则转发请求。
 type Handler struct {
-	service       rules.Service
-	defaultTarget *url.URL
-	transport     http.RoundTripper
-	logger        *slog.Logger
+	service        rules.Service
+	accountService accounts.Service
+	defaultTarget  *url.URL
+	transport      http.RoundTripper
+	logger         *slog.Logger
 }
 
 // Option 定义 Handler 可配参数。
@@ -87,6 +89,14 @@ func RegisterRoutes(engine *gin.Engine, handler *Handler) {
 
 // Handle 转发任意未命中的请求。
 func (h *Handler) Handle(c *gin.Context) {
+	binding, hasBinding := middleware.CurrentBinding(c)
+	upstreamInfo, hasUpstream := middleware.CurrentUpstreamInfo(c)
+	if hasBinding && hasUpstream {
+		if err := h.authorizeBinding(c, binding, upstreamInfo); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+	}
 	rule, err := h.matchRule(c)
 	if err != nil {
 		status := http.StatusBadGateway
@@ -129,7 +139,7 @@ func (h *Handler) Handle(c *gin.Context) {
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 		middleware.WithRequestID(req, middleware.RequestIDFromContext(c))
-		if err := h.applyRuleActions(req, rule); err != nil {
+		if err := h.applyRuleActions(c, req, rule); err != nil {
 			req.Header.Add("X-YAPI-Body-Rewrite-Error", err.Error())
 			if h.logger != nil {
 				h.logger.Warn("apply rule actions failed",
@@ -222,6 +232,14 @@ func matchesRequest(c *gin.Context, matcher rules.Matcher) bool {
 }
 
 func (h *Handler) resolveTarget(c *gin.Context, rule rules.Rule) (*url.URL, error) {
+	if info, ok := middleware.CurrentUpstreamInfo(c); ok {
+		if len(info.Endpoints) > 0 {
+			target, err := url.Parse(strings.TrimSpace(info.Endpoints[0]))
+			if err == nil {
+				return target, nil
+			}
+		}
+	}
 	target := rule.Actions.SetTargetURL
 	if target == "" && h.defaultTarget != nil {
 		return h.defaultTarget, nil
@@ -236,7 +254,7 @@ func (h *Handler) resolveTarget(c *gin.Context, rule rules.Rule) (*url.URL, erro
 	return u, nil
 }
 
-func (h *Handler) applyRuleActions(req *http.Request, rule rules.Rule) error {
+func (h *Handler) applyRuleActions(c *gin.Context, req *http.Request, rule rules.Rule) error {
 	actions := rule.Actions
 	for key, value := range actions.SetHeaders {
 		req.Header.Set(key, value)
@@ -261,6 +279,20 @@ func (h *Handler) applyRuleActions(req *http.Request, rule rules.Rule) error {
 		if err := rewriteJSONBody(req, actions.OverrideJSON, actions.RemoveJSON); err != nil {
 			return err
 		}
+	}
+	if info, ok := middleware.CurrentUpstreamInfo(c); ok {
+		if req.Header.Get("Authorization") == "" && strings.TrimSpace(actions.SetAuthorization) == "" && strings.TrimSpace(info.Credential.APIKey) != "" {
+			req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(info.Credential.APIKey))
+		}
+		if provider := strings.TrimSpace(info.Credential.Provider); provider != "" {
+			req.Header.Set("X-Upstream-Provider", provider)
+		}
+		if info.Credential.ID != "" {
+			req.Header.Set("X-Upstream-Credential-ID", info.Credential.ID)
+		}
+	}
+	if user, ok := middleware.CurrentUser(c); ok && strings.TrimSpace(user.ID) != "" {
+		req.Header.Set("X-YAPI-User-ID", user.ID)
 	}
 	return nil
 }
@@ -315,6 +347,22 @@ func rewriteJSONBody(req *http.Request, override map[string]any, remove []string
 	req.ContentLength = int64(len(bodyBytes))
 	if req.Header != nil {
 		req.Header.Set("Content-Length", strconv.Itoa(len(bodyBytes)))
+	}
+	return nil
+}
+
+func (h *Handler) authorizeBinding(c *gin.Context, binding accounts.UserAPIKeyBinding, upstream middleware.UpstreamInfo) error {
+	if upstream.Credential.ID == "" {
+		return errors.New("upstream credential missing")
+	}
+	if binding.UpstreamCredentialID != upstream.Credential.ID {
+		return errors.New("binding mismatch upstream")
+	}
+	if upstream.Credential.UserID != binding.UserID {
+		return errors.New("binding ownership mismatch")
+	}
+	if user, ok := middleware.CurrentUser(c); ok && user.ID != "" && user.ID != binding.UserID {
+		return errors.New("api key not authorized for user")
 	}
 	return nil
 }
@@ -375,4 +423,11 @@ func (m *metricsRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	}
 	metrics.ObserveUpstream(req.URL.Host, status, duration, err != nil)
 	return resp, err
+}
+
+// WithAccountsService enables account-aware routing.
+func WithAccountsService(accounts accounts.Service) Option {
+	return func(h *Handler) {
+		h.accountService = accounts
+	}
 }

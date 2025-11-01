@@ -1,10 +1,12 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 
-import LoginPage from './pages/LoginPage'
-import RulesPage from './pages/RulesPage'
 import { useAuth } from './hooks/useAuth'
 import ToastContainer from './components/ToastContainer'
 import ConfirmDialog from './components/ConfirmDialog'
+import AdminLayout from './components/AdminLayout'
+import LoginPage from './pages/LoginPage'
+import RulesPage from './pages/RulesPage'
+import UsersPage from './pages/UsersPage'
 
 const RequireAuth = () => {
   const { token, loading } = useAuth()
@@ -23,7 +25,10 @@ function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireAuth />}>
-          <Route path="/" element={<RulesPage />} />
+          <Route element={<AdminLayout />}>
+            <Route path="/" element={<RulesPage />} />
+            <Route path="/users" element={<UsersPage />} />
+          </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
