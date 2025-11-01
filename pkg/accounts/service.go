@@ -16,10 +16,10 @@ import (
 )
 
 const (
-    apiKeyPrefix               = "yapi"
-    apiKeySecretBytes          = 24
-    userAPIKeySecretHashCost   = bcrypt.DefaultCost
-    defaultAPIKeyPrefixSegment = 4
+	apiKeyPrefix               = "yapi"
+	apiKeySecretBytes          = 24
+	userAPIKeySecretHashCost   = bcrypt.DefaultCost
+	defaultAPIKeyPrefixSegment = 4
 )
 
 // Service exposes account management operations.
@@ -190,18 +190,18 @@ func (s *service) RevokeUserAPIKey(ctx context.Context, apiKeyID string) error {
 }
 
 func (s *service) CreateUpstreamCredential(ctx context.Context, params CreateUpstreamCredentialParams) (UpstreamCredential, error) {
-    if strings.TrimSpace(params.UserID) == "" {
-        return UpstreamCredential{}, fmt.Errorf("%w: user_id required", ErrInvalidInput)
-    }
-    if _, err := s.GetUser(ctx, params.UserID); err != nil {
-        return UpstreamCredential{}, err
-    }
-    cred := UpstreamCredential{
-        ID:         uuid.NewString(),
-        UserID:     params.UserID,
-        Provider:   strings.TrimSpace(params.Provider),
-        Label:      strings.TrimSpace(params.Label),
-        APIKey:     strings.TrimSpace(params.Plaintext),
+	if strings.TrimSpace(params.UserID) == "" {
+		return UpstreamCredential{}, fmt.Errorf("%w: user_id required", ErrInvalidInput)
+	}
+	if _, err := s.GetUser(ctx, params.UserID); err != nil {
+		return UpstreamCredential{}, err
+	}
+	cred := UpstreamCredential{
+		ID:       uuid.NewString(),
+		UserID:   params.UserID,
+		Provider: strings.TrimSpace(params.Provider),
+		Label:    strings.TrimSpace(params.Label),
+		APIKey:   strings.TrimSpace(params.Plaintext),
 	}
 	if len(params.Endpoints) > 0 {
 		endpointsJSON, encodeErr := json.Marshal(params.Endpoints)

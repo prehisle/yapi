@@ -73,16 +73,16 @@ func (k APIKey) Validate() error {
 
 // UpstreamCredential stores user-scoped upstream provider secrets and endpoints.
 type UpstreamCredential struct {
-	ID         string            `gorm:"type:char(36);primaryKey"`
-	UserID     string            `gorm:"type:char(36);index"`
-	Provider   string            `gorm:"type:varchar(64);index"`
-	Label      string            `gorm:"type:varchar(128)"`
-	APIKey     string            `gorm:"type:varchar(255)"`
-	Endpoints  datatypes.JSON    `gorm:"type:jsonb"`
-	Metadata   datatypes.JSONMap `gorm:"type:jsonb"`
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	DeletedAt  gorm.DeletedAt `gorm:"index"`
+	ID        string            `gorm:"type:char(36);primaryKey"`
+	UserID    string            `gorm:"type:char(36);index"`
+	Provider  string            `gorm:"type:varchar(64);index"`
+	Label     string            `gorm:"type:varchar(128)"`
+	APIKey    string            `gorm:"type:varchar(255)"`
+	Endpoints datatypes.JSON    `gorm:"type:jsonb"`
+	Metadata  datatypes.JSONMap `gorm:"type:jsonb"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
 }
 
 // Validate ensures the upstream credential is well formed.

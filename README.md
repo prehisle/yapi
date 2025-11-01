@@ -155,6 +155,7 @@ npm run test:e2e   # 端到端验证（需预先启动 docker compose 并执行 
 ## 开发规范
 
 - 新增依赖后运行 `go mod tidy`，保持 `go.mod` / `go.sum` 同步。
+- 安装开发工具：`go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
 - 提交前执行 `golangci-lint run ./...`，规则配置见 `.golangci.yml`；也可以使用 `make lint`、`make test`、`make verify` 快速运行常规检查，其中 `make verify` 会自动拉起 Docker Compose 并执行健康检查、指标校验与 SSE 回归测试。
 - 代码统一使用 `gofmt` / `gofumpt` 自动格式化。
 - 测试命名遵循 `Test<组件>_<场景>`，集成测试置于 `internal/integration_test`（需带 `-tags compose_test`）。
