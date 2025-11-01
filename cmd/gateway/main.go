@@ -25,6 +25,7 @@ import (
 	"github.com/prehisle/yapi/internal/admin"
 	"github.com/prehisle/yapi/internal/middleware"
 	"github.com/prehisle/yapi/internal/proxy"
+	"github.com/prehisle/yapi/pkg/accounts"
 	"github.com/prehisle/yapi/pkg/config"
 	"github.com/prehisle/yapi/pkg/rules"
 )
@@ -38,7 +39,7 @@ func main() {
 	cfg := config.Load()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	store, dbCloser := setupStore(ctx, cfg)
+	store, db, dbCloser := setupStore(ctx, cfg)
 	defer func() {
 		if dbCloser != nil {
 			if err := dbCloser(); err != nil {
@@ -62,6 +63,12 @@ func main() {
 	}
 	if eventBus != nil {
 		serviceOpts = append(serviceOpts, rules.WithEventBus(eventBus))
+	}
+
+	if db != nil {
+		if err := accounts.NewService(db).AutoMigrate(ctx); err != nil {
+			log.Fatalf("accounts migration failed: %v", err)
+		}
 	}
 
 	ruleService := rules.NewService(store, serviceOpts...)
@@ -171,9 +178,9 @@ func seedDefaultRule(ctx context.Context, svc rules.Service) error {
 	return svc.UpsertRule(ctx, defaultRule)
 }
 
-func setupStore(ctx context.Context, cfg config.Config) (rules.Store, func() error) {
+func setupStore(ctx context.Context, cfg config.Config) (rules.Store, *gorm.DB, func() error) {
 	if cfg.DatabaseDSN == "" {
-		return rules.NewMemoryStore(), nil
+		return rules.NewMemoryStore(), nil, nil
 	}
 	gormLogger := logger.New(log.New(os.Stdout, "gorm: ", log.LstdFlags), logger.Config{
 		SlowThreshold: time.Second,
@@ -195,7 +202,7 @@ func setupStore(ctx context.Context, cfg config.Config) (rules.Store, func() err
 	if err := store.AutoMigrate(ctx); err != nil {
 		log.Fatalf("database migration failed: %v", err)
 	}
-	return store, sqlDB.Close
+	return store, db, sqlDB.Close
 }
 
 func configureSQLDB(db *sql.DB) {
