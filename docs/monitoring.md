@@ -22,6 +22,7 @@ scrape_configs:
 - `gateway_http_requests_total{route="/admin/healthz"}`：健康检查的请求量，结合 `increase()` 判断实例是否存活。
 - `gateway_http_request_duration_seconds_bucket`：网关请求延迟分布，建议关注 `route="<unmatched>"`（命中默认Proxy）与核心业务路由。
 - `gateway_upstream_latency_seconds_bucket{upstream="api.openai.com"}`：上游 LLM 延迟直方图，可拆分成功/失败 outcome。
+- `gateway_admin_actions_total{action="accounts.users.create",outcome="success"}`：统计管理端对规则、账户、凭据的 CRUD 操作结果，便于审计与发现失败操作；可结合 `rate()` 构建操作审计图。
 - `process_open_fds`、`go_goroutines`：Go runtime 默认指标，辅助判断资源泄漏。
 
 ## Grafana 面板示例

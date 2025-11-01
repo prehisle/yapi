@@ -41,12 +41,12 @@ Deliver a functional proxy that forwards streaming requests with declarative rul
 - ✅ 引入 `pkg/accounts` 域服务与数据库迁移，提供用户、API Key、上游凭据和绑定的管理接口，并在管理端 API 中公开 CRUD 能力。
 - ✅ Web 管理后台新增导航框架与“用户管理”界面，可完成用户创建、密钥生成、上游凭据绑定等主流程。
 - ✅ 代理链路集成 API Key 鉴权中间件，可依据绑定信息选择上游并自动注入凭据；集成测试覆盖账户→上游→代理请求全链路。
-- ⏳ Playwright 端到端脚本新增用户场景，需继续稳定等待逻辑，可考虑直接调用后端轮询 API 或在 UI 侧增加刷新指示，确保列表刷新后再断言。
+- ✅ Playwright 端到端脚本覆盖用户全流程，已在 `web/admin/tests/users.e2e.spec.ts` 中通过轮询 API 等待列表刷新，替代脆弱的固定等待。
 - ⏳ 账户与上游管理相关的负载与缓存策略（API Key 缓存、速率限制）尚未落地，待后续迭代。
-- ⏳ 将账户 API 的 CORS 配置同步到生产部署（Nginx / Gateway 前置层），避免浏览器跨域问题。
-- ⏳ 扩展 `go test -tags compose_test` 针对用户 / 上游流程的异常验证，覆盖绑定不存在上游、密钥失效等场景。
+- ✅ 已通过 `ADMIN_ALLOWED_ORIGINS` 与 `deploy/nginx/accounts.conf` 示例同步账户 API 的 CORS 白名单策略，并在 `docs/security.md` 记录部署指引。
+- ✅ `internal/integration_test/gateway_compose_test.go` 新增异常路径覆盖绑定缺失、密钥吊销等场景，`go test -tags compose_test` 已通过。
 
 ### 即刻推进事项
-- Playwright 端到端脚本：实现基于账户列表 API 的轮询工具或 UI 侧刷新指示，让断言等待列表实际更新；补充日志截图收集以定位间歇性失败。
-- 账户 API CORS：梳理本地 / 预发配置差异，更新生产前置（Nginx、Gateway）CORS header，并在文档中记录来源白名单与缓存策略。
-- Compose 集成测试：在 `internal/integration_test` 中新增异常用例，覆盖用户绑定缺失上游、上游密钥过期、Redis 不可用等情境，并确保 `go test -tags compose_test` 稳定通过。
+- 管理端单元测试：为 `internal/admin/handler.go` 新增的用户、API Key、上游凭据处理器补齐单元测试，防止回归。
+- 账户缓存 / 限流方案：明确缓存命中策略、Redis 结构与速率限制指标，规划实现路径。
+- 运维文档：将 `gateway_admin_actions_total` 等新指标补充到监控/运维手册，指导运营团队观测管理操作。
