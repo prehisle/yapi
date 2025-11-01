@@ -12,6 +12,9 @@
 | FR-08 | Apply rule priority resolution | Medium | Bob (Platform) | 1d |
 | FR-09 | Allow optional JSON body mutation before forward | Medium | Chen (Integration) | 2d |
 | FR-10 | Research sandboxed JavaScript action support via goja | Low | Eva (R&D) | 3d |
+| FR-11 | Add account service (users、API Key、上游凭据) 及管理端 API | High | Alice (Backend) | 4d |
+| FR-12 | Proxy API Key 鉴权与上游绑定选路 | High | Bob (Platform) | 3d |
+| FR-13 | 管理后台用户管理 UI 与端到端测试 | Medium | Diana (Admin UI) | 4d |
 | NFR-03 | Add admin auth + secret management flow | High | Frank (Security) | 3d |
 | NFR-05 | Expose metrics/logging for observability | Medium | Grace (Observability) | 2d |
 

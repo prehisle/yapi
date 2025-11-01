@@ -20,11 +20,12 @@ test.describe('用户管理端到端', () => {
   test('管理员可创建用户并绑定上游凭据', async ({ page, request }) => {
     await waitForGatewayReady(request)
 
-    await loginViaAPIOrSkip(request)
+    const token = await loginViaAPIOrSkip(request)
 
     const userName = `e2e-user-${Date.now()}`
     const provider = `mock-${Date.now()}`
     const upstreamSecret = `sk-upstream-${Date.now()}`
+    const userId = (await createUserViaAPI(request, token, userName)).id
 
     await page.goto('/')
     await page.locator('input[autocomplete="username"]').fill(adminUsername)
@@ -35,17 +36,12 @@ test.describe('用户管理端到端', () => {
     await page.getByRole('link', { name: '用户管理' }).click()
     await expect(page.getByRole('heading', { name: '用户管理' })).toBeVisible()
 
-    await page.getByRole('button', { name: '新建用户' }).click()
-    const createUserDialog = page.locator('.dialog').first()
-    await expect(createUserDialog).toBeVisible()
-    await createUserDialog.locator('.field').filter({ hasText: '用户名称' }).locator('input').fill(userName)
-    await createUserDialog.locator('.field').filter({ hasText: '描述' }).locator('textarea').fill('端到端测试用户')
-    await createUserDialog.getByRole('button', { name: '保存' }).click()
-    await expect(createUserDialog).not.toBeVisible()
-
+    await page.goto('/users')
+    await expect(page.getByRole('heading', { name: '用户管理' })).toBeVisible()
+    await page.getByRole('button', { name: '刷新' }).click()
     const userRow = page.locator('table tbody tr', { hasText: userName })
-    await expect(userRow).toBeVisible()
-    await userRow.getByRole('button', { name: '查看详情' }).click()
+    await expect.poll(async () => (await userRow.count()) > 0, { timeout: 20000 }).toBeTruthy()
+    await userRow.first().getByRole('button', { name: '查看详情' }).click()
 
     await page.getByRole('button', { name: '生成 API Key' }).click()
     const apiKeyDialog = page.locator('.dialog').filter({ hasText: `为 ${userName} 生成密钥` })
@@ -76,7 +72,7 @@ test.describe('用户管理端到端', () => {
 
     const apiKeyPrefix = clientSecret!.split('_')[1]
     const apiKeyRow = page.locator('table').first().locator('tbody tr').filter({ hasText: apiKeyPrefix })
-    await expect(apiKeyRow).toBeVisible()
+    await expect.poll(async () => (await apiKeyRow.count()) > 0, { timeout: 15000 }).toBeTruthy()
 
     const select = apiKeyRow.locator('select')
     await expect(select).toBeVisible()
@@ -84,6 +80,13 @@ test.describe('用户管理端到端', () => {
 
     await expect(apiKeyRow.getByText('已绑定')).toBeVisible()
     await expect(apiKeyRow.getByText(`${provider} · primary`)).toBeVisible()
+
+    const keys = await listUserAPIKeys(request, token, userId)
+    const apiKey = keys.items.find((item) => item.prefix === apiKeyPrefix)
+    expect(apiKey).toBeTruthy()
+    const binding = await getBindingViaAPI(request, token, apiKey!.id)
+    expect(binding.upstream.provider).toBe(provider)
+    expect(binding.upstream.label).toBe('primary')
   })
 })
 
@@ -109,4 +112,29 @@ async function loginViaAPIOrSkip(request: APIRequestContext): Promise<string> {
   const payload = await response.json()
   expect(payload?.access_token).toBeTruthy()
   return payload.access_token as string
+}
+
+async function createUserViaAPI(request: APIRequestContext, token: string, name: string) {
+  const response = await request.post(`${backendBaseURL}/admin/users`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { name, description: 'e2e user' },
+  })
+  expect(response.ok(), `create user failed: ${await response.text()}`).toBeTruthy()
+  return (await response.json()) as { id: string; name: string }
+}
+
+async function listUserAPIKeys(request: APIRequestContext, token: string, userId: string) {
+  const response = await request.get(`${backendBaseURL}/admin/users/${userId}/api-keys`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(response.ok()).toBeTruthy()
+  return (await response.json()) as { items: Array<{ id: string; prefix: string }> }
+}
+
+async function getBindingViaAPI(request: APIRequestContext, token: string, apiKeyId: string) {
+  const response = await request.get(`${backendBaseURL}/admin/api-keys/${apiKeyId}/binding`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(response.ok()).toBeTruthy()
+  return (await response.json()) as { upstream: { provider: string; label: string } }
 }

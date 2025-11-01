@@ -36,3 +36,10 @@ Deliver a functional proxy that forwards streaming requests with declarative rul
 - Streaming regression: add integration test with SSE fixture from `testdata/stream/`.
 - Rule cache staleness: add TTL fallback, ensure pub/sub reconnect logic.
 - Secret exposure: require `.env.local`, document in `docs/security.md`, enforce vault integration in later sprint.
+
+## Progress Update · 2025-11-01
+- ✅ 引入 `pkg/accounts` 域服务与数据库迁移，提供用户、API Key、上游凭据和绑定的管理接口，并在管理端 API 中公开 CRUD 能力。
+- ✅ Web 管理后台新增导航框架与“用户管理”界面，可完成用户创建、密钥生成、上游凭据绑定等主流程。
+- ✅ 代理链路集成 API Key 鉴权中间件，可依据绑定信息选择上游并自动注入凭据；集成测试覆盖账户→上游→代理请求全链路。
+- ⏳ Playwright 端到端脚本新增用户场景，仍需稳定等待逻辑以避免列表刷新延迟导致的偶发失败。
+- ⏳ 账户与上游管理相关的负载与缓存策略（API Key 缓存、速率限制）尚未落地，待后续迭代。

@@ -180,7 +180,7 @@ func startGateway(t *testing.T, cfg config.Config, logger *slog.Logger, ruleServ
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(middleware.RequestID(), middleware.AccessLogger(logger))
+	router.Use(middleware.RequestID(), middleware.AccessLogger(logger), middleware.CORS())
 
 	var accountService accounts.Service
 	if db != nil {

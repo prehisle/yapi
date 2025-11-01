@@ -78,7 +78,10 @@ func APIKeyAuth(auth Authenticator) gin.HandlerFunc {
 func extractAPIKey(req *http.Request) string {
 	value := req.Header.Get("Authorization")
 	if strings.HasPrefix(strings.ToLower(value), "bearer ") {
-		return strings.TrimSpace(value[7:])
+		candidate := strings.TrimSpace(value[7:])
+		if strings.HasPrefix(candidate, "yapi_") {
+			return candidate
+		}
 	}
 	if key := req.Header.Get("X-API-Key"); key != "" {
 		return strings.TrimSpace(key)
