@@ -3,6 +3,9 @@ import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../hooks/useAuth'
+import { Input } from '../components/ui/Input'
+import { Button } from '../components/ui/Button'
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card'
 
 const LoginPage = () => {
   const { login, loading, token } = useAuth()
@@ -29,39 +32,51 @@ const LoginPage = () => {
 
   return (
     <div className="page page--center">
-      <form className="card login-card" onSubmit={handleSubmit}>
-        <h1 className="card__title">管理员登录</h1>
-        <label className="field">
-          <span className="field__label">用户名</span>
-          <input
-            className="field__input"
-            type="text"
-            autoComplete="username"
-            value={form.username}
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, username: event.target.value }))
-            }
-            required
-          />
-        </label>
-        <label className="field">
-          <span className="field__label">密码</span>
-          <input
-            className="field__input"
-            type="password"
-            autoComplete="current-password"
-            value={form.password}
-            onChange={(event) =>
-              setForm((prev) => ({ ...prev, password: event.target.value }))
-            }
-            required
-          />
-        </label>
-        {error ? <p className="field__error">{error}</p> : null}
-        <button className="button" type="submit" disabled={loading}>
-          {loading ? '登录中...' : '登录'}
-        </button>
-      </form>
+      <Card className="login-card max-w-md w-full">
+        <CardHeader>
+          <CardTitle className="text-center">管理员登录</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <Input
+              id="username"
+              label="用户名"
+              type="text"
+              autoComplete="username"
+              value={form.username}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, username: event.target.value }))
+              }
+              required
+              placeholder="请输入管理员用户名"
+              autoFocus
+            />
+
+            <Input
+              id="password"
+              label="密码"
+              type="password"
+              autoComplete="current-password"
+              value={form.password}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, password: event.target.value }))
+              }
+              required
+              placeholder="请输入密码"
+              error={error || undefined}
+            />
+
+            <Button
+              type="submit"
+              loading={loading}
+              fullWidth
+              size="lg"
+            >
+              {loading ? '登录中...' : '登录'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }

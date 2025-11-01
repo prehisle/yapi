@@ -52,25 +52,38 @@ npm run dev        # Development server (proxies to localhost:8080)
 npm run build      # Build for production
 npm run lint       # ESLint check
 npm run test:e2e   # End-to-end tests (requires Docker Compose)
+
+# Environment variables:
+# VITE_API_BASE_URL - Override API base URL (default: http://localhost:8080)
+# PLAYWRIGHT_API_BASE_URL - Override E2E testing API URL
 ```
 
 **E2E Testing:**
 - Requires running `docker compose -f deploy/docker-compose.yml up -d` first
 - Uses Playwright with browser automation
 - Configure via `PLAYWRIGHT_API_BASE_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`
-- Fixed refresh button state detection in users.e2e.spec.ts - now handles brief loading states gracefully
+- Run `npx playwright install --with-deps chromium` before first execution
+- Frontend build required before running E2E tests
 
 ### Docker Development
 
 **Start development environment:**
 ```bash
-docker compose -f deploy/docker-compose.yml up gateway
+docker compose -f deploy/docker-compose.yml up -d
 ```
 
 **Start with monitoring (Prometheus + Grafana):**
 ```bash
-docker compose -f deploy/docker-compose.monitoring.yml up
+docker compose -f deploy/docker-compose.monitoring.yml up -d
 ```
+
+**Port mappings:**
+- Gateway: 8080
+- Redis: 9108 (for testing)
+- PostgreSQL: 9109 (for testing)
+- HTTPbin: 9107 (for testing)
+- Prometheus: 9090
+- Grafana: 3000 (admin/admin)
 
 ## Architecture Overview
 
@@ -130,13 +143,35 @@ Uses GORM auto-migration for rule and account storage. Key models include:
 
 ### Configuration
 
-Environment-based configuration (see `.env.example`):
+Environment-based configuration (see `.env.example` and `.env.local.example`):
 - `GATEWAY_PORT`: Server port (default: 8080)
 - `DATABASE_DSN`: PostgreSQL connection string
-- `REDIS_ADDR`: Redis server address
+- `REDIS_ADDR`: Redis server address (default: localhost:6379)
+- `REDIS_CHANNEL`: Rule sync channel (default: rules:sync)
+- `REDIS_MAINT_NOTIFICATIONS_MODE`: Redis maintenance mode (disabled/auto/enabled)
 - `ADMIN_USERNAME/PASSWORD`: Basic auth credentials
 - `ADMIN_TOKEN_SECRET`: JWT signing secret
+- `ADMIN_TOKEN_TTL`: JWT expiration time (default: 30m)
+- `ADMIN_ALLOWED_ORIGINS`: CORS allowed origins (comma-separated)
 - `UPSTREAM_BASE_URL`: Default fallback upstream
+
+## Security Considerations
+
+### Authentication
+- **Basic Auth**: Configurable via `ADMIN_USERNAME`/`ADMIN_PASSWORD`
+- **JWT Tokens**: Short-lived tokens with configurable TTL via `ADMIN_TOKEN_SECRET`
+- **CORS**: Configurable origin whitelisting via `ADMIN_ALLOWED_ORIGINS`
+- **API Key Authentication**: Automatic API key validation and upstream credential injection
+
+### JSON Processing Security
+- JSON rewrite operations use `tidwall/sjson` library
+- Only processes `Content-Type: application/json` requests
+- Errors logged with `X-YAPI-Body-Rewrite-Error` header for audit tracking
+
+### Environment Security
+- Use `.env.local` for local development (never commit credentials)
+- Production environments should use secrets management
+- Rotate JWT secrets regularly
 
 ## Testing Strategy
 
@@ -146,9 +181,22 @@ Environment-based configuration (see `.env.example`):
 - End-to-end frontend tests using Playwright in `web/admin/tests/`
 - Health check and regression testing via `scripts/verify_gateway.sh`
 
+## Environment Management
+
+### Local Development
+1. Copy `.env.local.example` to `.env.local` and configure
+2. Use strong random credentials for production
+3. Generate JWT secrets: `openssl rand -hex 32`
+4. Configure CORS origins as needed
+
+### Environment Variables
+- Use separate files for different environments
+- Never commit `.env.local` to version control
+- Production should use secrets management systems
+
 ## Development Workflow
 
-1. Copy `.env.example` to `.env.local` and configure
+1. Copy `.env.local.example` to `.env.local` and configure
 2. Run `make lint` before committing
 3. Use `make verify` for full integration testing
 4. Follow Go formatting standards (gofmt/gofumpt)

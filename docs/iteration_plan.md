@@ -45,9 +45,9 @@ Deliver a functional proxy that forwards streaming requests with declarative rul
 - ⏳ 账户与上游管理相关的负载与缓存策略（API Key 缓存、速率限制）尚未落地，待后续迭代。
 - ✅ 已通过 `ADMIN_ALLOWED_ORIGINS` 与 `deploy/nginx/accounts.conf` 示例同步账户 API 的 CORS 白名单策略，并在 `docs/security.md` 记录部署指引。
 - ✅ `internal/integration_test/gateway_compose_test.go` 新增异常路径覆盖绑定缺失、密钥吊销等场景，`go test -tags compose_test` 已通过。
-- 🚧 规则匹配尚无法识别用户/密钥上下文，需要扩展 matcher 支持 API Key、用户元数据与上游凭据过滤，以满足差异化路由需求。
+- 🚧 规则匹配虽已支持账户上下文，但密钥提取入口仍固定在标准头，且元数据匹配缺乏去重/嵌套处理，需要补齐配置化提取与匹配策略。
 
 ### 即刻推进事项
-- 规则匹配扩展：设计并落地 matcher 新字段（API Key 前缀/ID、用户 ID、用户元数据、上游凭据 ID/Provider、require_binding），完成后端校验与代理匹配逻辑。
-- 管理端更新：为规则编辑/详情页添加新匹配字段的配置入口与校验提示，保证 JSON 结构双向解析。
-- 集成与验证：补充单元测试与 compose 集成测试，覆盖不同密钥命中不同规则的场景；更新文档描述与升级指引。
+- 密钥提取扩展：实现可配置 API Key 读取（自定义头、可选 JSON 路径），同步文档与运维指引。
+- 规则匹配体验：优化管理端输入校验与 API 过滤能力，提供示例与去重逻辑，确保多字段配置易用。
+- 自动化覆盖：补充 Playwright 与集成测试，验证多租户/多上游场景；完善测试计划与示例数据脚本。

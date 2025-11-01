@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 
 import { RuleFormDialog } from '../components/RuleFormDialog'
 import { RuleDetailDrawer } from '../components/RuleDetailDrawer'
+import { Button } from '../components/ui/Button'
+import { SearchInput } from '../components/ui/SearchInput'
+import { Select } from '../components/ui/Select'
 import { useAuth } from '../hooks/useAuth'
 import { useUIContext } from '../context/UIContext'
 import { apiClient, UnauthorizedError } from '../lib/api'
@@ -183,48 +186,49 @@ const RulesPage = () => {
     <div className="page">
       <header className="page__header">
         <div>
-          <h1>规则管理</h1>
-          <p style={{ margin: '8px 0 0', color: '#475467' }}>
+          <h1 className="page__title">规则管理</h1>
+          <p className="page__description">
             共 {total} 条规则，启用 {enabledTotal} 条
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button className="button" onClick={openCreateDialog}>
+        <div className="flex gap-3">
+          <Button onClick={openCreateDialog} variant="primary">
             新建规则
-          </button>
-          <button className="button button--ghost" onClick={handleRefresh} disabled={loading}>
+          </Button>
+          <Button onClick={handleRefresh} variant="ghost" disabled={loading}>
             {loading ? '刷新中...' : '刷新'}
-          </button>
+          </Button>
         </div>
       </header>
 
       <div className="toolbar">
-        <input
-          className="field__input field__input--inline"
-          placeholder="搜索 ID、路径或目标地址"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <select
-          className="field__input field__input--inline"
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-        >
-          <option value="all">全部状态</option>
-          <option value="enabled">仅启用</option>
-          <option value="disabled">仅未启用</option>
-        </select>
-        <select
-          className="field__input field__input--inline"
-          value={pageSize}
-          onChange={(event) => setPageSize(Number(event.target.value))}
-        >
-          {[10, 20, 50].map((size) => (
-            <option key={size} value={size}>
-              每页 {size} 条
-            </option>
-          ))}
-        </select>
+        <div className="toolbar__group">
+          <SearchInput
+            placeholder="搜索 ID、路径或目标地址"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onClear={() => setSearch('')}
+          />
+
+          <Select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+            options={[
+              { value: 'all', label: '全部状态' },
+              { value: 'enabled', label: '仅启用' },
+              { value: 'disabled', label: '仅未启用' },
+            ]}
+          />
+
+          <Select
+            value={String(pageSize)}
+            onChange={(event) => setPageSize(Number(event.target.value))}
+            options={[10, 20, 50].map((size) => ({
+              value: String(size),
+              label: `每页 ${size} 条`,
+            }))}
+          />
+        </div>
       </div>
 
       {error ? <div className="alert alert--error">{error}</div> : null}
@@ -262,26 +266,28 @@ const RulesPage = () => {
                   </td>
                   <td>
                     <div className="table-actions">
-                      <button className="button button--ghost" onClick={() => openDetail(rule)}>
+                      <Button variant="ghost" size="sm" onClick={() => openDetail(rule)}>
                         详情
-                      </button>
-                      <button
-                        className="button button--ghost"
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleToggleRule(rule)}
                         disabled={updatingId === rule.id}
                       >
                         {rule.enabled ? '禁用' : '启用'}
-                      </button>
-                      <button className="button button--ghost" onClick={() => openEditDialog(rule)}>
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(rule)}>
                         编辑
-                      </button>
-                      <button
-                        className="button button--ghost"
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleDeleteRule(rule)}
                         disabled={updatingId === rule.id}
                       >
                         删除
-                      </button>
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -293,23 +299,27 @@ const RulesPage = () => {
 
       {total > 0 ? (
         <div className="pagination">
-          <button
-            className="button button--ghost"
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={page === 1 || loading}
-          >
-            上一页
-          </button>
-          <span>
-            第 {page} / {totalPages} 页
-          </span>
-          <button
-            className="button button--ghost"
-            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            disabled={page >= totalPages || loading}
-          >
-            下一页
-          </button>
+          <div className="pagination__info">
+            第 {page} / {totalPages} 页，共 {total} 条记录
+          </div>
+          <div className="pagination__controls">
+            <Button
+              variant="ghost"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={page === 1 || loading}
+              size="sm"
+            >
+              上一页
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={page >= totalPages || loading}
+              size="sm"
+            >
+              下一页
+            </Button>
+          </div>
         </div>
       ) : null}
 

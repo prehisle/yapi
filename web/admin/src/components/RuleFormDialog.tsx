@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 
 import type { Rule } from '../types/rule'
+import { Button } from './ui/Button'
 
 export type RuleFormDialogProps = {
   open: boolean
@@ -274,12 +275,12 @@ export const RuleFormDialog = ({
 
   return (
     <div className="dialog-backdrop" role="dialog" aria-modal>
-      <form className="dialog dialog--wide" onSubmit={handleSubmit}>
+      <form className="dialog dialog--full" onSubmit={handleSubmit}>
         <div className="dialog__header">
           <h2 className="dialog__title">{dialogTitle}</h2>
-          <button type="button" className="dialog__close" onClick={onClose} aria-label="关闭">
+          <Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label="关闭">
             ×
-          </button>
+          </Button>
         </div>
 
         <section className="form-section">
@@ -512,17 +513,17 @@ export const RuleFormDialog = ({
         {submitError ? <div className="alert alert--error">{submitError}</div> : null}
 
         <div className="dialog__actions">
-          <button
+          <Button
             type="button"
-            className="button button--ghost"
+            variant="ghost"
             onClick={onClose}
             disabled={submitting}
           >
             取消
-          </button>
-          <button className="button" type="submit" disabled={submitting}>
-            {submitting ? '提交中...' : '保存'}
-          </button>
+          </Button>
+          <Button type="submit" loading={submitting}>
+            {submitting ? '提交中...' : mode === 'edit' ? '保存' : '创建'}
+          </Button>
         </div>
       </form>
     </div>

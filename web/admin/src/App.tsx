@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 
 import { useAuth } from './hooks/useAuth'
+import { ThemeProvider } from './context/ThemeContext'
 import ToastContainer from './components/ToastContainer'
 import ConfirmDialog from './components/ConfirmDialog'
 import AdminLayout from './components/AdminLayout'
@@ -21,7 +22,7 @@ const RequireAuth = () => {
 
 function App() {
   return (
-    <>
+    <ThemeProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireAuth />}>
@@ -34,7 +35,7 @@ function App() {
       </Routes>
       <ToastContainer />
       <ConfirmDialog />
-    </>
+    </ThemeProvider>
   )
 }
 

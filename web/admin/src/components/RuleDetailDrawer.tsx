@@ -1,5 +1,7 @@
 import type { Rule } from '../types/rule'
 import { RuleDiffViewer } from './RuleDiffViewer'
+import { Button } from './ui/Button'
+import { InfoCard, InfoItem } from './ui/InfoCard'
 
 export type RuleDetailDrawerProps = {
   open: boolean
@@ -46,224 +48,278 @@ export const RuleDetailDrawer = ({ open, rule, previousRule, onClose }: RuleDeta
       <aside className="drawer">
         <header className="drawer__header">
           <div>
-            <h2 className="drawer__title">规则详情</h2>
-            <p className="drawer__subtitle">{rule.id}</p>
+            <h2 className="drawer__title flex items-center gap-2">
+              规则详情
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                rule.enabled
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                  : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+              }`}>
+                {rule.enabled ? '已启用' : '未启用'}
+              </span>
+            </h2>
+            <p className="drawer__subtitle">ID: {rule.id} | 优先级: {rule.priority}</p>
           </div>
-          <button className="drawer__close" onClick={onClose} aria-label="关闭">
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="关闭">
             ×
-          </button>
+          </Button>
         </header>
 
-        <section className="drawer-section">
-          <h3 className="drawer-section__title">基础信息</h3>
-          <dl className="description-list">
-            <div>
-              <dt>ID</dt>
-              <dd>{rule.id}</dd>
-            </div>
-            <div>
-              <dt>优先级</dt>
-              <dd>{rule.priority}</dd>
-            </div>
-            <div>
-              <dt>路径前缀</dt>
-              <dd>{rule.matcher.path_prefix ?? '-'}</dd>
-            </div>
-            <div>
-              <dt>方法</dt>
-              <dd>{methods}</dd>
-            </div>
-            <div>
-              <dt>目标地址</dt>
-              <dd>{rule.actions.set_target_url ?? '-'}</dd>
-            </div>
-            <div>
-              <dt>状态</dt>
-              <dd>{rule.enabled ? '已启用' : '未启用'}</dd>
-            </div>
-          </dl>
-        </section>
+        <div className="drawer__content">
+          <div className="space-y-6">
+            <InfoCard
+              title="基础信息"
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                  <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+              }
+            >
+              <div className="space-y-0">
+                <InfoItem label="ID" value={rule.id} copyable />
+                <InfoItem label="优先级" value={rule.priority} />
+                <InfoItem label="路径前缀" value={rule.matcher.path_prefix || '-'} copyable />
+                <InfoItem label="方法" value={methods} />
+                <InfoItem label="目标地址" value={rule.actions.set_target_url || '-'} copyable />
+              </div>
+            </InfoCard>
 
-        <section className="drawer-section">
-          <h3 className="drawer-section__title">账户上下文匹配</h3>
-          <dl className="description-list">
-            <div>
-              <dt>Require Binding</dt>
-              <dd>{rule.matcher.require_binding ? '是' : '否'}</dd>
-            </div>
-          </dl>
-          <div className="drawer-table">
-            <h4>API Key ID</h4>
-            {apiKeyIDs.length > 0 ? (
-              <ul>
-                {apiKeyIDs.map((id) => (
-                  <li key={id}>{id}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="drawer-empty">-</p>
+            <InfoCard
+              title="账户上下文匹配"
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              }
+              badge={
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                  rule.matcher.require_binding
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                    : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                }`}>
+                  {rule.matcher.require_binding ? '需要绑定' : '可选绑定'}
+                </span>
+              }
+            >
+              <div className="space-y-3">
+                {apiKeyIDs.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">API Key ID</h5>
+                    <div className="flex flex-wrap gap-1">
+                      {apiKeyIDs.map((id) => (
+                        <span key={id} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-mono bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                          {id}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {apiKeyPrefixes.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">API Key 前缀</h5>
+                    <div className="flex flex-wrap gap-1">
+                      {apiKeyPrefixes.map((prefix) => (
+                        <span key={prefix} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-mono bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                          {prefix}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {userIDs.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">用户 ID</h5>
+                    <div className="flex flex-wrap gap-1">
+                      {userIDs.map((id) => (
+                        <span key={id} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-mono bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                          {id}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {userMetadata.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">用户 Metadata</h5>
+                    <div className="space-y-1">
+                      {userMetadata.map(({ key, value }) => (
+                        <div key={key} className="flex items-center gap-2 text-xs">
+                          <span className="font-mono bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 px-1 py-0.5 rounded">
+                            {key}
+                          </span>
+                          <span className="text-gray-600 dark:text-gray-400">:</span>
+                          <span className="font-mono text-gray-800 dark:text-gray-200">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {upstreamIDs.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">绑定上游 ID</h5>
+                    <div className="flex flex-wrap gap-1">
+                      {upstreamIDs.map((id) => (
+                        <span key={id} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-mono bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                          {id}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {upstreamProviders.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">绑定上游提供商</h5>
+                    <div className="flex flex-wrap gap-1">
+                      {upstreamProviders.map((provider) => (
+                        <span key={provider} className="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                          {provider}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!apiKeyIDs.length && !apiKeyPrefixes.length && !userIDs.length && !userMetadata.length && !upstreamIDs.length && !upstreamProviders.length && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 italic">无账户上下文匹配条件</p>
+                )}
+              </div>
+            </InfoCard>
+
+            <InfoCard
+              title="头部动作"
+              icon={
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 9V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4" />
+                  <path d="M22 15v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" />
+                </svg>
+              }
+            >
+              {setHeaders.length > 0 && (
+                <div>
+                  <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">覆盖头部（set_headers）</h5>
+                  <div className="space-y-1">
+                    {setHeaders.map(({ key, value }) => (
+                      <div key={key} className="flex items-center gap-2 text-xs">
+                        <span className="font-mono bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-1 py-0.5 rounded">
+                          {key}
+                        </span>
+                        <span className="text-gray-600 dark:text-gray-400">:</span>
+                        <span className="font-mono text-gray-800 dark:text-gray-200">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {addHeaders.length > 0 && (
+                <div>
+                  <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">添加头部（add_headers）</h5>
+                  <div className="space-y-1">
+                    {addHeaders.map(({ key, value }) => (
+                      <div key={key} className="flex items-center gap-2 text-xs">
+                        <span className="font-mono bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 px-1 py-0.5 rounded">
+                          {key}
+                        </span>
+                        <span className="text-gray-600 dark:text-gray-400">:</span>
+                        <span className="font-mono text-gray-800 dark:text-gray-200">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {removeHeaders.length > 0 && (
+                <div>
+                  <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">移除头部（remove_headers）</h5>
+                  <div className="flex flex-wrap gap-1">
+                    {removeHeaders.map((header) => (
+                      <span key={header} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-mono bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 line-through">
+                        {header}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {rule.actions.set_authorization && (
+                <div>
+                  <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">授权头部</h5>
+                  <div className="font-mono text-xs text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 p-2 rounded">
+                    {rule.actions.set_authorization}
+                  </div>
+                </div>
+              )}
+
+              {!setHeaders.length && !addHeaders.length && !removeHeaders.length && !rule.actions.set_authorization && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 italic">无头部动作</p>
+              )}
+            </InfoCard>
+
+            {rule.actions.override_json && (
+              <InfoCard
+                title="请求体动作"
+                icon={
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                    <polyline points="14,2 14,8 20,8" />
+                  </svg>
+                }
+              >
+                <div>
+                  <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">override_json</h5>
+                  <div className="bg-gray-900 text-green-400 p-3 rounded-md overflow-x-auto">
+                    <pre className="text-xs font-mono">
+                      {stringifyJSON(rule.actions.override_json)}
+                    </pre>
+                  </div>
+                </div>
+
+                {rule.actions.remove_json && rule.actions.remove_json.length > 0 && (
+                  <div className="mt-4">
+                    <h5 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">remove_json</h5>
+                    <div className="flex flex-wrap gap-1">
+                      {rule.actions.remove_json.map((path) => (
+                        <span key={path} className="inline-flex items-center px-2 py-1 rounded-md text-xs font-mono bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                          {path}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </InfoCard>
+            )}
+
+            {previousRule && (
+              <InfoCard
+                title="变更对比"
+                icon={
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 11H3v6h6v-6z" />
+                    <path d="M21 11h-6v6h6v-6z" />
+                    <path d="M5 19v2h2" />
+                    <path d="M17 19v2h2" />
+                    <path d="M5 3V1H3" />
+                    <path d="M17 3V1h2" />
+                  </svg>
+                }
+              >
+                <RuleDiffViewer previous={previousRule} current={rule} />
+              </InfoCard>
             )}
           </div>
-
-          <div className="drawer-table">
-            <h4>API Key 前缀</h4>
-            {apiKeyPrefixes.length > 0 ? (
-              <ul>
-                {apiKeyPrefixes.map((prefix) => (
-                  <li key={prefix}>{prefix}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="drawer-empty">-</p>
-            )}
-          </div>
-
-          <div className="drawer-table">
-            <h4>用户 ID</h4>
-            {userIDs.length > 0 ? (
-              <ul>
-                {userIDs.map((id) => (
-                  <li key={id}>{id}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="drawer-empty">-</p>
-            )}
-          </div>
-
-          <div className="drawer-table">
-            <h4>用户 Metadata</h4>
-            {userMetadata.length > 0 ? (
-              <table>
-                <tbody>
-                  {userMetadata.map((item) => (
-                    <tr key={item.key}>
-                      <td>{item.key}</td>
-                      <td>{item.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="drawer-empty">-</p>
-            )}
-          </div>
-
-          <div className="drawer-table">
-            <h4>上游凭据 ID</h4>
-            {upstreamIDs.length > 0 ? (
-              <ul>
-                {upstreamIDs.map((id) => (
-                  <li key={id}>{id}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="drawer-empty">-</p>
-            )}
-          </div>
-
-          <div className="drawer-table">
-            <h4>上游 Provider</h4>
-            {upstreamProviders.length > 0 ? (
-              <ul>
-                {upstreamProviders.map((provider) => (
-                  <li key={provider}>{provider}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="drawer-empty">-</p>
-            )}
-          </div>
-        </section>
-
-        <section className="drawer-section">
-          <h3 className="drawer-section__title">头部动作</h3>
-          <div className="drawer-table">
-            <h4>覆盖头部（set_headers）</h4>
-            {setHeaders.length > 0 ? (
-              <table>
-                <tbody>
-                  {setHeaders.map((item) => (
-                    <tr key={item.key}>
-                      <td>{item.key}</td>
-                      <td>{item.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="drawer-empty">-</p>
-            )}
-          </div>
-
-          <div className="drawer-table">
-            <h4>追加头部（add_headers）</h4>
-            {addHeaders.length > 0 ? (
-              <table>
-                <tbody>
-                  {addHeaders.map((item) => (
-                    <tr key={item.key}>
-                      <td>{item.key}</td>
-                      <td>{item.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="drawer-empty">-</p>
-            )}
-          </div>
-
-          <div className="drawer-table">
-            <h4>移除头部（remove_headers）</h4>
-            {removeHeaders.length > 0 ? (
-              <ul>
-                {removeHeaders.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="drawer-empty">-</p>
-            )}
-          </div>
-
-          <dl className="description-list">
-            <div>
-              <dt>Authorization 头</dt>
-              <dd>{rule.actions.set_authorization ?? '-'}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section className="drawer-section">
-          <h3 className="drawer-section__title">请求体动作</h3>
-          <div className="drawer-code">
-            <h4>override_json</h4>
-            <pre>{stringifyJSON(rule.actions.override_json)}</pre>
-          </div>
-          <div className="drawer-table">
-            <h4>remove_json</h4>
-            {rule.actions.remove_json?.length ? (
-              <ul>
-                {rule.actions.remove_json.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="drawer-empty">-</p>
-            )}
-          </div>
-        </section>
-
-        <section className="drawer-section">
-          <h3 className="drawer-section__title">变更对比</h3>
-          <RuleDiffViewer previous={previousRule} current={rule} />
-        </section>
+        </div>
 
         <footer className="drawer__footer">
-          <button className="button button--ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose}>
             关闭
-          </button>
+          </Button>
         </footer>
       </aside>
     </div>

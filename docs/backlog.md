@@ -15,6 +15,9 @@
 | FR-14 | Extend rule matcher with API key / user / upstream context filters | High | Bob (Platform) | 4d |
 | FR-15 | Update admin UI to configure advanced matcher fields | High | Diana (Admin UI) | 3d |
 | FR-16 | Add regression tests for account-aware routing rules | Medium | Chen (Integration) | 3d |
+| FR-17 | Support configurable API key extraction headers for account matcher | High | Bob (Platform) | 3d |
+| FR-18 | Enhance rule metadata filtering & UX (dedupe, examples, API filters) | Medium | Diana (Admin UI) | 2d |
+| FR-19 | Deliver Playwright coverage for account context scenarios | Medium | Chen (Integration) | 2d |
 | NFR-03 | Add admin auth + secret management flow | High | Frank (Security) | 3d |
 | NFR-05 | Expose metrics/logging for observability | Medium | Grace (Observability) | 2d |
 

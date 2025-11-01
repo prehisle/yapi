@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 
 import { useAuth } from '../hooks/useAuth'
+import { ThemeToggle } from './ThemeToggle'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `app-nav__link${isActive ? ' app-nav__link--active' : ''}`
@@ -24,9 +25,12 @@ const AdminLayout = () => {
               用户管理
             </NavLink>
           </nav>
-          <button className="button button--ghost" onClick={logout}>
-            退出登录
-          </button>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <button className="button button--ghost" onClick={logout}>
+              退出登录
+            </button>
+          </div>
         </div>
       </header>
       <main className="app-main">
