@@ -83,7 +83,7 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(middleware.RequestID(), middleware.AccessLogger(logger), middleware.CORS())
+	router.Use(middleware.RequestID(), middleware.AccessLogger(logger), middleware.CORS(cfg.AdminAllowedOrigins))
 	if accountService != nil {
 		router.Use(middleware.APIKeyAuth(accountService))
 	}

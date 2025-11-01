@@ -10,16 +10,17 @@ import (
 
 // Config 汇总服务运行所需的环境变量配置。
 type Config struct {
-	GatewayPort      string
-	UpstreamBaseURL  string
-	DatabaseDSN      string
-	RedisAddr        string
-	RedisChannel     string
-	RedisMaintMode   string
-	AdminUsername    string
-	AdminPassword    string
-	AdminTokenSecret string
-	AdminTokenTTL    time.Duration
+	GatewayPort         string
+	UpstreamBaseURL     string
+	DatabaseDSN         string
+	RedisAddr           string
+	RedisChannel        string
+	RedisMaintMode      string
+	AdminUsername       string
+	AdminPassword       string
+	AdminTokenSecret    string
+	AdminTokenTTL       time.Duration
+	AdminAllowedOrigins []string
 }
 
 const (
@@ -43,6 +44,9 @@ func Load() Config {
 		AdminUsername:    os.Getenv("ADMIN_USERNAME"),
 		AdminPassword:    os.Getenv("ADMIN_PASSWORD"),
 		AdminTokenSecret: os.Getenv("ADMIN_TOKEN_SECRET"),
+	}
+	if rawAllowed := os.Getenv("ADMIN_ALLOWED_ORIGINS"); rawAllowed != "" {
+		cfg.AdminAllowedOrigins = parseCSV(rawAllowed)
 	}
 	cfg.RedisMaintMode = normalizeMaintMode(cfg.RedisMaintMode)
 	if ttl := os.Getenv("ADMIN_TOKEN_TTL"); ttl != "" {
@@ -74,6 +78,17 @@ func lookupEnvOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func parseCSV(raw string) []string {
+	parts := strings.Split(raw, ",")
+	var values []string
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+	return values
 }
 
 func normalizeMaintMode(mode string) string {

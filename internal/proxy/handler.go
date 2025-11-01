@@ -281,8 +281,8 @@ func (h *Handler) applyRuleActions(c *gin.Context, req *http.Request, rule rules
 		}
 	}
 	if info, ok := middleware.CurrentUpstreamInfo(c); ok {
-		if req.Header.Get("Authorization") == "" && strings.TrimSpace(actions.SetAuthorization) == "" && strings.TrimSpace(info.Credential.APIKey) != "" {
-			req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(info.Credential.APIKey))
+		if apiKey := strings.TrimSpace(info.Credential.APIKey); apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+apiKey)
 		}
 		if provider := strings.TrimSpace(info.Credential.Provider); provider != "" {
 			req.Header.Set("X-Upstream-Provider", provider)

@@ -42,3 +42,5 @@
 
 ## Agent-Specific Instructions
 - 与用户交互时始终使用中文回复，包括讨论代码、测试结果或提交建议。
+- 启动需要常驻运行的进程（如 `go run ./cmd/gateway`）时，务必在同一个 shell 调用中以后台方式运行并立即返回（例如包裹在 `(...) & echo $!` 中），避免阻塞会话；必要时记录 PID 或提供停止方法。
+- 若需运行网关守护进程，优先使用 Docker Compose 后台模式：`docker compose -f deploy/docker-compose.yml up -d gateway`；查看日志用 `logs -f gateway`，停止使用 `stop gateway` 或 `down`，避免直接 `go run` 卡住会话。

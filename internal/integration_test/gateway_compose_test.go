@@ -167,11 +167,52 @@ func TestGateway_AdminAndProxyIntegration(t *testing.T) {
 	require.Equal(t, http.StatusOK, accountResp.StatusCode)
 
 	accountCall := upstream.WaitForCall(t)
-	require.Equal(t, pathPrefix+"/chat", accountCall.Path)
+	require.Equal(t, "/anything/chat", accountCall.Path)
 	require.Equal(t, "Bearer "+upstreamSecret, accountCall.Headers.Get("Authorization"))
 	require.Equal(t, "mock-provider", accountCall.Headers.Get("X-Upstream-Provider"))
 	require.Equal(t, credential.ID, accountCall.Headers.Get("X-Upstream-Credential-ID"))
 	require.Equal(t, user.ID, accountCall.Headers.Get("X-YAPI-User-ID"))
+
+	t.Run("binding missing upstream returns not found", func(t *testing.T) {
+		key, _ := createUserAPIKey(t, client, baseURL, token, user.ID, "missing-upstream")
+		resp := adminJSONRequest(t, client, baseURL, token, http.MethodPost, "/admin/api-keys/"+key.ID+"/binding", map[string]any{
+			"user_id":                user.ID,
+			"upstream_credential_id": uuid.NewString(),
+		})
+		body, readErr := io.ReadAll(resp.Body)
+		require.NoError(t, readErr)
+		resp.Body.Close()
+		require.Equalf(t, http.StatusNotFound, resp.StatusCode, "unexpected response: %s", string(body))
+	})
+
+	t.Run("revoked api key rejects proxy calls", func(t *testing.T) {
+		key, secret := createUserAPIKey(t, client, baseURL, token, user.ID, "revocation-check")
+		_ = bindAPIKey(t, client, baseURL, token, key.ID, user.ID, credential.ID)
+
+		validReqBody := `{"messages":[{"role":"user","content":"before revocation"}]}`
+		successReq, err := http.NewRequest(http.MethodPost, baseURL+pathPrefix+"/chat", bytes.NewBufferString(validReqBody))
+		require.NoError(t, err)
+		successReq.Header.Set("Content-Type", "application/json")
+		successReq.Header.Set("Authorization", "Bearer "+secret)
+		successResp, err := client.Do(successReq)
+		require.NoError(t, err)
+		defer successResp.Body.Close()
+		require.Equal(t, http.StatusOK, successResp.StatusCode)
+		_, _ = io.ReadAll(successResp.Body)
+
+		deleteUserAPIKey(t, client, baseURL, token, key.ID)
+
+		failReq, err := http.NewRequest(http.MethodPost, baseURL+pathPrefix+"/chat", bytes.NewBufferString(validReqBody))
+		require.NoError(t, err)
+		failReq.Header.Set("Content-Type", "application/json")
+		failReq.Header.Set("Authorization", "Bearer "+secret)
+		failResp, err := client.Do(failReq)
+		require.NoError(t, err)
+		defer failResp.Body.Close()
+		body, readErr := io.ReadAll(failResp.Body)
+		require.NoError(t, readErr)
+		require.Equalf(t, http.StatusUnauthorized, failResp.StatusCode, "expected unauthorized, got %d body=%s", failResp.StatusCode, string(body))
+	})
 }
 
 func startGateway(t *testing.T, cfg config.Config, logger *slog.Logger, ruleService rules.Service, db *gorm.DB) *httptestServer {
@@ -180,7 +221,7 @@ func startGateway(t *testing.T, cfg config.Config, logger *slog.Logger, ruleServ
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(middleware.RequestID(), middleware.AccessLogger(logger), middleware.CORS())
+	router.Use(middleware.RequestID(), middleware.AccessLogger(logger), middleware.CORS(cfg.AdminAllowedOrigins))
 
 	var accountService accounts.Service
 	if db != nil {
@@ -424,6 +465,12 @@ func bindAPIKey(t *testing.T, client *http.Client, baseURL, token, apiKeyID, use
 	var result apiKeyBindingDTO
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
 	return result
+}
+
+func deleteUserAPIKey(t *testing.T, client *http.Client, baseURL, token, apiKeyID string) {
+	resp := adminJSONRequest(t, client, baseURL, token, http.MethodDelete, "/admin/api-keys/"+apiKeyID, nil)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
 func loginAndGetToken(t *testing.T, client *http.Client, baseURL, username, password string) string {

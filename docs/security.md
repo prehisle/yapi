@@ -24,3 +24,15 @@
 - **后续计划**：
   - 评估引入多租户 / RBAC 模块，细化权限控制。
   - 调研对接企业身份提供商（OIDC/SAML），减少静态凭据依赖。
+
+## 2025-11-02：账户 API CORS 配置同步
+
+- **背景**：管理端 / 账户 API 在本地通过 Gin 中间件回显请求 Origin；生产前置层（Nginx / Gateway）未同步相同策略，导致浏览器跨域失败。
+- **改动**：
+  - 新增环境变量 `ADMIN_ALLOWED_ORIGINS`，用于限制允许运营前端访问的白名单，留空则回显请求 `Origin`。
+  - `internal/middleware.CORS` 支持基于白名单判断；集成测试沿用统一配置。
+  - `deploy/nginx/accounts.conf` 提供示例配置，确保前置 Nginx 与应用层保持一致的 CORS 头。
+- **操作指引**：
+  - 在生产环境的 Gateway 容器或系统服务中配置 `ADMIN_ALLOWED_ORIGINS=https://admin.example.com,https://ops.example.com`。
+  - 更新 Nginx，确保 `map` 中白名单与环境变量一致，并允许 `OPTIONS` 预检请求返回 204。
+  - 每次新增前端域名时，同时调整环境变量与 Nginx 配置，避免遗漏。
