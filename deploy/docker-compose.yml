@@ -1,6 +1,13 @@
 version: "3.9"
 
 services:
+  httpbin:
+    image: mccutchen/go-httpbin:v2.11.1
+    environment:
+      PORT: 8080
+    ports:
+      - "9107:8080"
+
   postgres:
     image: postgres:15
     environment:
@@ -31,7 +38,10 @@ services:
       REDIS_CHANNEL: "rules:sync"
     ports:
       - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
+      - httpbin
       - postgres
       - redis
 

@@ -105,9 +105,15 @@ npm install        # 首次安装依赖
 npm run dev        # 本地开发，默认代理请求至 http://localhost:8080
 npm run build      # 产出静态资源
 npm run lint       # 代码质量检查
+npm run test:e2e   # 端到端验证（需预先启动 docker compose 并执行 npm run build）
 ```
-
 默认开发代理会将 `/admin` 请求转发至后端服务；如需定制可设置 `VITE_API_BASE_URL`。
+
+端到端测试说明：
+
+- 需事先运行 `docker compose -f deploy/docker-compose.yml up -d` 启动 PostgreSQL、Redis 及网关，并在 `web/admin` 目录执行一次 `npm run build`。
+- Playwright 默认使用 `http://localhost:8080` 作为管理 API，可通过 `PLAYWRIGHT_API_BASE_URL` 覆盖；登录凭据取自环境变量 `ADMIN_USERNAME` / `ADMIN_PASSWORD`。
+- 首次执行前请运行 `npx playwright install --with-deps chromium` 准备浏览器依赖。
 
 ## 开发规范
 
