@@ -65,6 +65,7 @@ func RegisterProtectedRoutes(group *gin.RouterGroup, handler *Handler) {
 
 	group.GET("/users/:id/upstreams", handler.listUpstreamCredentials)
 	group.POST("/users/:id/upstreams", handler.createUpstreamCredential)
+	group.PUT("/upstreams/:id", handler.updateUpstreamCredential)
 	group.DELETE("/upstreams/:id", handler.deleteUpstreamCredential)
 
 	group.POST("/api-keys/:id/binding", handler.bindAPIKey)
@@ -89,7 +90,9 @@ type createAPIKeyRequest struct {
 
 type createUpstreamCredentialRequest struct {
 	Provider  string         `json:"provider" binding:"required"`
+	Service   string         `json:"service"`
 	Label     string         `json:"label"`
+	Name      string         `json:"name"`
 	Plaintext string         `json:"plaintext" binding:"required"`
 	Endpoints []string       `json:"endpoints"`
 	Metadata  map[string]any `json:"metadata"`
@@ -98,6 +101,18 @@ type createUpstreamCredentialRequest struct {
 type bindAPIKeyRequest struct {
 	UserID               string `json:"user_id" binding:"required"`
 	UpstreamCredentialID string `json:"upstream_credential_id" binding:"required"`
+}
+
+type updateUpstreamCredentialRequest struct {
+	UserID    *string        `json:"user_id"`
+	Provider  *string        `json:"provider"`
+	Service   *string        `json:"service"`
+	Label     *string        `json:"label"`
+	Name      *string        `json:"name"`
+	Plaintext *string        `json:"plaintext"`
+	Endpoints *[]string      `json:"endpoints"`
+	Metadata  map[string]any `json:"metadata"`
+	Enabled   *bool          `json:"enabled"`
 }
 
 type userResponse struct {
@@ -123,7 +138,9 @@ type upstreamCredentialResponse struct {
 	ID        string         `json:"id"`
 	UserID    string         `json:"user_id"`
 	Provider  string         `json:"provider"`
+	Service   string         `json:"service"`
 	Label     string         `json:"label"`
+	Name      string         `json:"name"`
 	Endpoints []string       `json:"endpoints,omitempty"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
 	CreatedAt time.Time      `json:"created_at"`
@@ -171,13 +188,18 @@ func toAPIKeyResponse(key accounts.APIKey) apiKeyResponse {
 func toUpstreamCredentialResponse(cred accounts.UpstreamCredential, endpoints []string) upstreamCredentialResponse {
 	var metadata map[string]any
 	if cred.Metadata != nil {
-		metadata = map[string]any(cred.Metadata)
+		metadata = make(map[string]any, len(cred.Metadata))
+		for key, value := range cred.Metadata {
+			metadata[key] = value
+		}
 	}
 	return upstreamCredentialResponse{
 		ID:        cred.ID,
 		UserID:    cred.UserID,
-		Provider:  cred.Provider,
-		Label:     cred.Label,
+		Provider:  cred.Service,
+		Service:   cred.Service,
+		Label:     cred.Name,
+		Name:      cred.Name,
 		Endpoints: endpoints,
 		Metadata:  metadata,
 		CreatedAt: cred.CreatedAt,
@@ -194,7 +216,7 @@ func toBindingResponse(binding accounts.UserAPIKeyBinding, upstream upstreamCred
 		ID:                   binding.ID,
 		UserID:               binding.UserID,
 		UserAPIKeyID:         binding.UserAPIKeyID,
-		UpstreamCredentialID: binding.UpstreamCredentialID,
+		UpstreamCredentialID: binding.UpstreamKeyID,
 		Metadata:             metadata,
 		CreatedAt:            binding.CreatedAt,
 		UpdatedAt:            binding.UpdatedAt,
@@ -394,7 +416,9 @@ func (h *Handler) createUpstreamCredential(c *gin.Context) {
 	cred, err := h.service.CreateUpstreamCredential(c.Request.Context(), accounts.CreateUpstreamCredentialParams{
 		UserID:    userID,
 		Provider:  req.Provider,
+		Service:   req.Service,
 		Label:     req.Label,
+		Name:      req.Name,
 		Plaintext: req.Plaintext,
 		Endpoints: req.Endpoints,
 		Metadata:  req.Metadata,
@@ -407,9 +431,83 @@ func (h *Handler) createUpstreamCredential(c *gin.Context) {
 	h.logInfo("upstream credential created", map[string]any{
 		"user":       currentAdminUser(c),
 		"credential": cred.ID,
-		"provider":   cred.Provider,
+		"service":    cred.Service,
 	})
-	c.JSON(http.StatusCreated, toUpstreamCredentialResponse(cred, endpoints))
+	resp := toUpstreamCredentialResponse(cred, endpoints)
+	if trimmed := strings.TrimSpace(req.Service); trimmed != "" {
+		resp.Service = trimmed
+	}
+	c.JSON(http.StatusCreated, resp)
+}
+
+func (h *Handler) updateUpstreamCredential(c *gin.Context) {
+	action := "accounts.upstreams.update"
+	credentialID := c.Param("id")
+	if credentialID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "credential id is required"})
+		return
+	}
+	var req updateUpstreamCredentialRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		metrics.ObserveAdminAction(action, false)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	params := accounts.UpdateUpstreamCredentialParams{
+		CredentialID: credentialID,
+	}
+	if req.UserID != nil {
+		params.UserID = strings.TrimSpace(*req.UserID)
+	}
+	if req.Provider != nil {
+		params.Provider = strings.TrimSpace(*req.Provider)
+	}
+	if req.Service != nil {
+		params.Service = strings.TrimSpace(*req.Service)
+	}
+	if req.Label != nil {
+		params.Label = strings.TrimSpace(*req.Label)
+	}
+	if req.Name != nil {
+		params.Name = strings.TrimSpace(*req.Name)
+	}
+	if req.Plaintext != nil {
+		trimmed := strings.TrimSpace(*req.Plaintext)
+		params.Plaintext = &trimmed
+	}
+	if req.Endpoints != nil {
+		cleaned := make([]string, 0, len(*req.Endpoints))
+		for _, endpoint := range *req.Endpoints {
+			trimmed := strings.TrimSpace(endpoint)
+			if trimmed != "" {
+				cleaned = append(cleaned, trimmed)
+			}
+		}
+		params.Endpoints = cleaned
+	}
+	if req.Metadata != nil {
+		params.Metadata = req.Metadata
+	}
+	if req.Enabled != nil {
+		params.Enabled = req.Enabled
+	}
+	cred, err := h.service.UpdateUpstreamCredential(c.Request.Context(), params)
+	if h.handleAccountsError(c, action, err, map[string]any{"credential": credentialID}) {
+		return
+	}
+	metrics.ObserveAdminAction(action, true)
+	h.logInfo("upstream credential updated", map[string]any{
+		"user":       currentAdminUser(c),
+		"credential": credentialID,
+		"service":    cred.Service,
+	})
+	resp := toUpstreamCredentialResponse(cred, decodeEndpoints(cred.Endpoints))
+	if req.Service != nil {
+		if trimmed := strings.TrimSpace(*req.Service); trimmed != "" {
+			resp.Service = trimmed
+		}
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *Handler) listUpstreamCredentials(c *gin.Context) {
