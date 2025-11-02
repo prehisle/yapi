@@ -37,16 +37,19 @@ type Service interface {
 	SetUserAPIKeyEnabled(ctx context.Context, apiKeyID string, enabled bool) error
 	RevokeUserAPIKey(ctx context.Context, apiKeyID string) error
 
-	CreateUpstreamKey(ctx context.Context, params CreateUpstreamKeyParams) (UpstreamKey, error)
-	ListUpstreamKeys(ctx context.Context, userID string) ([]UpstreamKey, error)
-	SetUpstreamKeyEnabled(ctx context.Context, upstreamKeyID string, enabled bool) error
-	DeleteUpstreamKey(ctx context.Context, upstreamKeyID string) error
+	CreateUpstreamCredential(ctx context.Context, params CreateUpstreamCredentialParams) (UpstreamCredential, error)
+	ListUpstreamCredentials(ctx context.Context, userID string) ([]UpstreamCredential, error)
+	UpdateUpstreamCredential(ctx context.Context, params UpdateUpstreamCredentialParams) (UpstreamCredential, error)
+	SetUpstreamCredentialEnabled(ctx context.Context, credentialID string, enabled bool) error
+	DeleteUpstreamCredential(ctx context.Context, credentialID string) error
 
-	UpsertBinding(ctx context.Context, params UpsertBindingParams) (UserKeyBinding, error)
+	BindAPIKey(ctx context.Context, params BindAPIKeyParams) (UserAPIKeyBinding, error)
 	ListBindingsByAPIKey(ctx context.Context, apiKeyID string) ([]BindingWithUpstream, error)
+	GetBindingByAPIKeyID(ctx context.Context, apiKeyID string) (UserAPIKeyBinding, UpstreamCredential, error)
 	DeleteBinding(ctx context.Context, bindingID string) error
 
 	ResolveAPIKey(ctx context.Context, rawKey string) (APIKey, error)
+	ResolveBindingByRawKey(ctx context.Context, rawKey string) (UserAPIKeyBinding, UpstreamCredential, error)
 }
 
 // CreateUserParams defines the payload for user creation.
@@ -63,8 +66,10 @@ type CreateAPIKeyParams struct {
 }
 
 // CreateUpstreamCredentialParams describes an upstream credential creation.
-type CreateUpstreamKeyParams struct {
+type CreateUpstreamCredentialParams struct {
 	UserID    string
+	Provider  string
+	Label     string
 	Service   string
 	Name      string
 	Plaintext string
@@ -72,20 +77,34 @@ type CreateUpstreamKeyParams struct {
 	Metadata  map[string]any
 }
 
-// UpsertBindingParams maps a user API key to an upstream key for a service.
-type UpsertBindingParams struct {
-	UserID         string
-	UserAPIKeyID   string
-	UpstreamKeyID  string
-	Service        string
-	Position       int
-	Metadata       map[string]any
+// UpdateUpstreamCredentialParams captures mutable fields of an upstream credential.
+type UpdateUpstreamCredentialParams struct {
+	CredentialID string
+	UserID       string
+	Provider     string
+	Label        string
+	Service      string
+	Name         string
+	Plaintext    *string
+	Endpoints    []string
+	Metadata     map[string]any
+	Enabled      *bool
+}
+
+// BindAPIKeyParams maps a user API key to an upstream key for a service.
+type BindAPIKeyParams struct {
+	UserID               string
+	UserAPIKeyID         string
+	UpstreamCredentialID string
+	Service              string
+	Position             int
+	Metadata             map[string]any
 }
 
 // BindingWithUpstream represents a binding alongside its upstream details.
 type BindingWithUpstream struct {
-	Binding  UserKeyBinding
-	Upstream UpstreamKey
+	Binding  UserAPIKeyBinding
+	Upstream UpstreamCredential
 }
 
 type service struct {
@@ -221,25 +240,28 @@ func (s *service) RevokeUserAPIKey(ctx context.Context, apiKeyID string) error {
 	})
 }
 
-func (s *service) CreateUpstreamKey(ctx context.Context, params CreateUpstreamKeyParams) (UpstreamKey, error) {
+func (s *service) CreateUpstreamCredential(ctx context.Context, params CreateUpstreamCredentialParams) (UpstreamCredential, error) {
 	if strings.TrimSpace(params.UserID) == "" {
-		return UpstreamKey{}, fmt.Errorf("%w: user_id required", ErrInvalidInput)
+		return UpstreamCredential{}, fmt.Errorf("%w: user_id required", ErrInvalidInput)
 	}
 	if _, err := s.GetUser(ctx, params.UserID); err != nil {
-		return UpstreamKey{}, err
+		return UpstreamCredential{}, err
 	}
-	key := UpstreamKey{
+	serviceName := firstNonEmpty(params.Service, params.Provider)
+	label := firstNonEmpty(params.Name, params.Label)
+	secret := strings.TrimSpace(params.Plaintext)
+	key := UpstreamCredential{
 		ID:      uuid.NewString(),
 		UserID:  params.UserID,
-		Service: strings.TrimSpace(params.Service),
-		Name:    strings.TrimSpace(params.Name),
-		APIKey:  strings.TrimSpace(params.Plaintext),
+		Service: serviceName,
+		Name:    label,
+		APIKey:  secret,
 		Enabled: true,
 	}
 	if len(params.Endpoints) > 0 {
 		endpointsJSON, encodeErr := json.Marshal(params.Endpoints)
 		if encodeErr != nil {
-			return UpstreamKey{}, encodeErr
+			return UpstreamCredential{}, encodeErr
 		}
 		key.Endpoints = datatypes.JSON(endpointsJSON)
 	}
@@ -247,27 +269,27 @@ func (s *service) CreateUpstreamKey(ctx context.Context, params CreateUpstreamKe
 		key.Metadata = datatypes.JSONMap(params.Metadata)
 	}
 	if err := key.Validate(); err != nil {
-		return UpstreamKey{}, err
+		return UpstreamCredential{}, err
 	}
 	if err := s.db.WithContext(ctx).Create(&key).Error; err != nil {
-		return UpstreamKey{}, err
+		return UpstreamCredential{}, err
 	}
 	return key, nil
 }
 
-func (s *service) ListUpstreamKeys(ctx context.Context, userID string) ([]UpstreamKey, error) {
-	var keys []UpstreamKey
+func (s *service) ListUpstreamCredentials(ctx context.Context, userID string) ([]UpstreamCredential, error) {
+	var keys []UpstreamCredential
 	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at ASC").Find(&keys).Error; err != nil {
 		return nil, err
 	}
 	return keys, nil
 }
 
-func (s *service) SetUpstreamKeyEnabled(ctx context.Context, upstreamKeyID string, enabled bool) error {
-	if strings.TrimSpace(upstreamKeyID) == "" {
+func (s *service) SetUpstreamCredentialEnabled(ctx context.Context, credentialID string, enabled bool) error {
+	if strings.TrimSpace(credentialID) == "" {
 		return fmt.Errorf("%w: upstream_key_id required", ErrInvalidInput)
 	}
-	result := s.db.WithContext(ctx).Model(&UpstreamKey{}).Where("id = ?", upstreamKeyID).Updates(map[string]any{
+	result := s.db.WithContext(ctx).Model(&UpstreamKey{}).Where("id = ?", credentialID).Updates(map[string]any{
 		"enabled":    enabled,
 		"updated_at": time.Now(),
 	})
@@ -280,25 +302,23 @@ func (s *service) SetUpstreamKeyEnabled(ctx context.Context, upstreamKeyID strin
 	return nil
 }
 
-func (s *service) DeleteUpstreamKey(ctx context.Context, upstreamKeyID string) error {
+func (s *service) DeleteUpstreamCredential(ctx context.Context, credentialID string) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.WithContext(ctx).Where("upstream_credential_id = ?", upstreamKeyID).Delete(&UserKeyBinding{}).Error; err != nil {
+		if err := tx.WithContext(ctx).Where("upstream_credential_id = ?", credentialID).Delete(&UserKeyBinding{}).Error; err != nil {
 			return err
 		}
-		if err := tx.WithContext(ctx).Where("id = ?", upstreamKeyID).Delete(&UpstreamKey{}).Error; err != nil {
+		if err := tx.WithContext(ctx).Where("id = ?", credentialID).Delete(&UpstreamKey{}).Error; err != nil {
 			return err
 		}
 		return nil
 	})
 }
 
-func (s *service) UpsertBinding(ctx context.Context, params UpsertBindingParams) (UserKeyBinding, error) {
+func (s *service) BindAPIKey(ctx context.Context, params BindAPIKeyParams) (UserAPIKeyBinding, error) {
 	if strings.TrimSpace(params.UserID) == "" {
-		return UserKeyBinding{}, fmt.Errorf("%w: user_id required", ErrInvalidInput)
+		return UserAPIKeyBinding{}, fmt.Errorf("%w: user_id required", ErrInvalidInput)
 	}
-	if strings.TrimSpace(params.Service) == "" {
-		return UserKeyBinding{}, fmt.Errorf("%w: service required", ErrInvalidInput)
-	}
+	var out UserAPIKeyBinding
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var apiKey APIKey
 		if err := tx.WithContext(ctx).First(&apiKey, "id = ?", params.UserAPIKeyID).Error; err != nil {
@@ -308,7 +328,7 @@ func (s *service) UpsertBinding(ctx context.Context, params UpsertBindingParams)
 			return err
 		}
 		var upstream UpstreamKey
-		if err := tx.WithContext(ctx).First(&upstream, "id = ?", params.UpstreamKeyID).Error; err != nil {
+		if err := tx.WithContext(ctx).First(&upstream, "id = ?", params.UpstreamCredentialID).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return fmt.Errorf("%w: upstream key not found", ErrNotFound)
 			}
@@ -317,8 +337,14 @@ func (s *service) UpsertBinding(ctx context.Context, params UpsertBindingParams)
 		if apiKey.UserID != params.UserID || upstream.UserID != params.UserID {
 			return fmt.Errorf("%w: binding ownership mismatch", ErrConflict)
 		}
-
 		targetService := strings.TrimSpace(params.Service)
+		if targetService == "" {
+			targetService = strings.TrimSpace(upstream.Service)
+		}
+		if targetService == "" {
+			return fmt.Errorf("%w: service required", ErrInvalidInput)
+		}
+
 		var binding UserKeyBinding
 		err := tx.WithContext(ctx).Where("user_api_key_id = ? AND service = ?", params.UserAPIKeyID, targetService).
 			First(&binding).Error
@@ -327,7 +353,7 @@ func (s *service) UpsertBinding(ctx context.Context, params UpsertBindingParams)
 				ID:            uuid.NewString(),
 				UserID:        params.UserID,
 				UserAPIKeyID:  params.UserAPIKeyID,
-				UpstreamKeyID: params.UpstreamKeyID,
+				UpstreamKeyID: params.UpstreamCredentialID,
 				Service:       targetService,
 				Position:      params.Position,
 			}
@@ -337,13 +363,17 @@ func (s *service) UpsertBinding(ctx context.Context, params UpsertBindingParams)
 			if err := binding.Validate(); err != nil {
 				return err
 			}
-			return tx.WithContext(ctx).Create(&binding).Error
+			if err := tx.WithContext(ctx).Create(&binding).Error; err != nil {
+				return err
+			}
+			out = UserAPIKeyBinding(binding)
+			return nil
 		}
 		if err != nil {
 			return err
 		}
 
-		binding.UpstreamKeyID = params.UpstreamKeyID
+		binding.UpstreamKeyID = params.UpstreamCredentialID
 		binding.Position = params.Position
 		if params.Metadata != nil {
 			binding.Metadata = datatypes.JSONMap(params.Metadata)
@@ -351,15 +381,144 @@ func (s *service) UpsertBinding(ctx context.Context, params UpsertBindingParams)
 		if err := binding.Validate(); err != nil {
 			return err
 		}
-		return tx.WithContext(ctx).Model(&UserKeyBinding{}).Where("id = ?", binding.ID).Updates(map[string]any{
+		if err := tx.WithContext(ctx).Model(&UserKeyBinding{}).Where("id = ?", binding.ID).Updates(map[string]any{
 			"upstream_credential_id": binding.UpstreamKeyID,
 			"position":               binding.Position,
 			"metadata":               binding.Metadata,
 			"updated_at":             time.Now(),
-		}).Error
+		}).Error; err != nil {
+			return err
+		}
+		out = UserAPIKeyBinding(binding)
+		return nil
 	})
 	if err != nil {
-		return UserKeyBinding{}, err
+		return UserAPIKeyBinding{}, err
+	}
+	return out, nil
+}
+
+func (s *service) UpdateUpstreamCredential(ctx context.Context, params UpdateUpstreamCredentialParams) (UpstreamCredential, error) {
+	if strings.TrimSpace(params.CredentialID) == "" {
+		return UpstreamCredential{}, fmt.Errorf("%w: credential_id required", ErrInvalidInput)
+	}
+	var key UpstreamKey
+	if err := s.db.WithContext(ctx).First(&key, "id = ?", params.CredentialID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return UpstreamCredential{}, ErrNotFound
+		}
+		return UpstreamCredential{}, err
+	}
+	if params.UserID != "" && key.UserID != params.UserID {
+		return UpstreamCredential{}, fmt.Errorf("%w: credential ownership mismatch", ErrConflict)
+	}
+	if serviceName := firstNonEmpty(params.Service, params.Provider); serviceName != "" {
+		key.Service = serviceName
+	}
+	if label := firstNonEmpty(params.Name, params.Label); label != "" {
+		key.Name = label
+	}
+	if params.Plaintext != nil {
+		secret := strings.TrimSpace(*params.Plaintext)
+		if secret == "" {
+			return UpstreamCredential{}, fmt.Errorf("%w: upstream credential api key empty", ErrInvalidInput)
+		}
+		key.APIKey = secret
+	}
+	if params.Endpoints != nil {
+		if len(params.Endpoints) == 0 {
+			key.Endpoints = nil
+		} else {
+			endpointsJSON, err := json.Marshal(params.Endpoints)
+			if err != nil {
+				return UpstreamCredential{}, err
+			}
+			key.Endpoints = datatypes.JSON(endpointsJSON)
+		}
+	}
+	if params.Metadata != nil {
+		key.Metadata = datatypes.JSONMap(params.Metadata)
+	}
+	if params.Enabled != nil {
+		key.Enabled = *params.Enabled
+	}
+	if err := key.Validate(); err != nil {
+		return UpstreamCredential{}, err
+	}
+	if err := s.db.WithContext(ctx).Save(&key).Error; err != nil {
+		return UpstreamCredential{}, err
+	}
+	return UpstreamCredential(key), nil
+}
+
+func (s *service) GetBindingByAPIKeyID(ctx context.Context, apiKeyID string) (UserAPIKeyBinding, UpstreamCredential, error) {
+	if strings.TrimSpace(apiKeyID) == "" {
+		return UserAPIKeyBinding{}, UpstreamCredential{}, fmt.Errorf("%w: api_key_id required", ErrInvalidInput)
+	}
+	var binding UserKeyBinding
+	err := s.db.WithContext(ctx).
+		Where("user_api_key_id = ?", apiKeyID).
+		Order("position ASC, created_at ASC").
+		First(&binding).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return UserAPIKeyBinding{}, UpstreamCredential{}, ErrNotFound
+	}
+	if err != nil {
+		return UserAPIKeyBinding{}, UpstreamCredential{}, err
+	}
+	var upstream UpstreamKey
+	if err := s.db.WithContext(ctx).First(&upstream, "id = ?", binding.UpstreamKeyID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return UserAPIKeyBinding{}, UpstreamCredential{}, ErrNotFound
+		}
+		return UserAPIKeyBinding{}, UpstreamCredential{}, err
+	}
+	return UserAPIKeyBinding(binding), UpstreamCredential(upstream), nil
+}
+
+func (s *service) ListBindingsByAPIKey(ctx context.Context, apiKeyID string) ([]BindingWithUpstream, error) {
+	if strings.TrimSpace(apiKeyID) == "" {
+		return nil, fmt.Errorf("%w: api_key_id required", ErrInvalidInput)
+	}
+	var bindings []UserKeyBinding
+	if err := s.db.WithContext(ctx).
+		Where("user_api_key_id = ?", apiKeyID).
+		Order("position ASC, created_at ASC").
+		Find(&bindings).Error; err != nil {
+		return nil, err
+	}
+	if len(bindings) == 0 {
+		return nil, nil
+	}
+	result := make([]BindingWithUpstream, 0, len(bindings))
+	for _, binding := range bindings {
+		var upstream UpstreamKey
+		if err := s.db.WithContext(ctx).First(&upstream, "id = ?", binding.UpstreamKeyID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrNotFound
+			}
+			return nil, err
+		}
+		result = append(result, BindingWithUpstream{
+			Binding:  UserAPIKeyBinding(binding),
+			Upstream: UpstreamCredential(upstream),
+		})
+	}
+	return result, nil
+}
+
+func (s *service) DeleteBinding(ctx context.Context, bindingID string) error {
+	if strings.TrimSpace(bindingID) == "" {
+		return fmt.Errorf("%w: binding_id required", ErrInvalidInput)
+	}
+	result := s.db.WithContext(ctx).Where("id = ?", bindingID).Delete(&UserKeyBinding{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *service) ResolveAPIKey(ctx context.Context, rawKey string) (APIKey, error) {
@@ -387,6 +546,15 @@ func (s *service) ResolveBindingByRawKey(ctx context.Context, rawKey string) (Us
 		return UserAPIKeyBinding{}, UpstreamCredential{}, err
 	}
 	return s.GetBindingByAPIKeyID(ctx, key.ID)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func generateAPIKey() (string, string, error) {

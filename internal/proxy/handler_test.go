@@ -195,14 +195,15 @@ func TestHandler_MatchRule_WithAccountMatchers(t *testing.T) {
 			ID:                   "binding-1",
 			UserID:               "user-1",
 			UserAPIKeyID:         "key-1",
-			UpstreamCredentialID: "cred-1",
+			UpstreamKeyID: "cred-1",
 		})
-		ctx.Set("auth_upstream", middleware.UpstreamInfo{
-			Credential: accounts.UpstreamCredential{
-				ID:       "cred-1",
-				UserID:   "user-1",
-				Provider: "openai",
-			},
+	ctx.Set("auth_upstream", middleware.UpstreamInfo{
+		Credential: accounts.UpstreamCredential{
+			ID:      "cred-1",
+			UserID:  "user-1",
+			Service: "openai",
+			Name:    "primary",
+		},
 			Endpoints: []string{"https://upstream.example.com"},
 		})
 

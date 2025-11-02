@@ -26,6 +26,7 @@ type Service interface {
 	RevokeUserAPIKey(ctx context.Context, apiKeyID string) error
 
 	CreateUpstreamCredential(ctx context.Context, params accounts.CreateUpstreamCredentialParams) (accounts.UpstreamCredential, error)
+	UpdateUpstreamCredential(ctx context.Context, params accounts.UpdateUpstreamCredentialParams) (accounts.UpstreamCredential, error)
 	ListUpstreamCredentials(ctx context.Context, userID string) ([]accounts.UpstreamCredential, error)
 	DeleteUpstreamCredential(ctx context.Context, credentialID string) error
 
@@ -106,6 +107,13 @@ func (s *service) CreateUpstreamCredential(ctx context.Context, params accounts.
 		return accounts.UpstreamCredential{}, ErrAccountsUnavailable
 	}
 	return s.accounts.CreateUpstreamCredential(ctx, params)
+}
+
+func (s *service) UpdateUpstreamCredential(ctx context.Context, params accounts.UpdateUpstreamCredentialParams) (accounts.UpstreamCredential, error) {
+	if s.accounts == nil {
+		return accounts.UpstreamCredential{}, ErrAccountsUnavailable
+	}
+	return s.accounts.UpdateUpstreamCredential(ctx, params)
 }
 
 func (s *service) ListUpstreamCredentials(ctx context.Context, userID string) ([]accounts.UpstreamCredential, error) {

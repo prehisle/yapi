@@ -20,3 +20,4 @@ bin/
 # Generated artifacts
 coverage/
 web/admin/test-results/
+.gocache/

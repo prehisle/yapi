@@ -43,7 +43,8 @@ func TestService_UserAPIKeyLifecycle(t *testing.T) {
 		Endpoints: []string{"https://api.openai.com/v1"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "openai", cred.Provider)
+	require.Equal(t, "openai", cred.Service)
+	require.Equal(t, "primary", cred.Name)
 
 	creds, err := svc.ListUpstreamCredentials(ctx, user.ID)
 	require.NoError(t, err)

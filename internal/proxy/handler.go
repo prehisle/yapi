@@ -279,7 +279,7 @@ func matchesRequest(c *gin.Context, matcher rules.Matcher) bool {
 		if !hasBinding {
 			return false
 		}
-		if !stringInSliceTrimmed(matcher.BindingUpstreamIDs, binding.UpstreamCredentialID, false) {
+		if !stringInSliceTrimmed(matcher.BindingUpstreamIDs, binding.UpstreamKeyID, false) {
 			return false
 		}
 	}
@@ -287,7 +287,7 @@ func matchesRequest(c *gin.Context, matcher rules.Matcher) bool {
 		if !hasUpstream {
 			return false
 		}
-		if !stringInSliceTrimmed(matcher.BindingProviders, upstreamInfo.Credential.Provider, true) {
+		if !stringInSliceTrimmed(matcher.BindingProviders, upstreamInfo.Credential.Service, true) {
 			return false
 		}
 	}
@@ -347,8 +347,12 @@ func (h *Handler) applyRuleActions(c *gin.Context, req *http.Request, rule rules
 		if apiKey := strings.TrimSpace(info.Credential.APIKey); apiKey != "" {
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 		}
-		if provider := strings.TrimSpace(info.Credential.Provider); provider != "" {
-			req.Header.Set("X-Upstream-Provider", provider)
+		if service := strings.TrimSpace(info.Credential.Service); service != "" {
+			req.Header.Set("X-Upstream-Service", service)
+			req.Header.Set("X-Upstream-Provider", service)
+		}
+		if name := strings.TrimSpace(info.Credential.Name); name != "" {
+			req.Header.Set("X-Upstream-Name", name)
 		}
 		if info.Credential.ID != "" {
 			req.Header.Set("X-Upstream-Credential-ID", info.Credential.ID)
@@ -458,7 +462,7 @@ func (h *Handler) authorizeBinding(c *gin.Context, binding accounts.UserAPIKeyBi
 	if upstream.Credential.ID == "" {
 		return errors.New("upstream credential missing")
 	}
-	if binding.UpstreamCredentialID != upstream.Credential.ID {
+	if binding.UpstreamKeyID != upstream.Credential.ID {
 		return errors.New("binding mismatch upstream")
 	}
 	if upstream.Credential.UserID != binding.UserID {

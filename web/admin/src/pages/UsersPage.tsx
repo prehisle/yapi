@@ -19,10 +19,23 @@ type DialogState =
   | { type: 'create-user' }
   | { type: 'create-api-key' }
   | { type: 'create-upstream' }
+  | { type: 'edit-upstream' }
   | null
 
 const emptyUserForm = { name: '', description: '' }
-const emptyUpstreamForm = { provider: '', label: '', plaintext: '', endpoints: '', metadata: '' }
+type UpstreamFormState = {
+  service: string
+  label: string
+  plaintext: string
+  endpoints: string
+}
+
+const emptyUpstreamForm: UpstreamFormState = {
+  service: '',
+  label: '',
+  plaintext: '',
+  endpoints: '',
+}
 
 const UsersPage = () => {
   const { logout } = useAuth()
@@ -42,11 +55,15 @@ const UsersPage = () => {
   const [dialog, setDialog] = useState<DialogState>(null)
   const [userForm, setUserForm] = useState(emptyUserForm)
   const [upstreamForm, setUpstreamForm] = useState(emptyUpstreamForm)
+  const [editingUpstream, setEditingUpstream] = useState<UpstreamCredential | null>(null)
 
   const selectedUser = useMemo(
     () => users.find((user) => user.id === selectedUserId) ?? null,
     [users, selectedUserId],
   )
+
+  const getUpstreamService = (cred: UpstreamCredential) => cred.service || cred.provider || ''
+  const getUpstreamLabel = (cred: UpstreamCredential) => cred.name || cred.label || cred.id
 
   const handleUnauthorized = useCallback(() => {
     logout()
@@ -141,19 +158,33 @@ const UsersPage = () => {
     setDialog({ type: 'create-user' })
   }
 
-  const openCreateAPIKeyDialog = () => {
-    setDialog({ type: 'create-api-key' })
-    setApiKeySecret(null)
-  }
+const openCreateAPIKeyDialog = () => {
+  setDialog({ type: 'create-api-key' })
+  setApiKeySecret(null)
+}
 
-  const openCreateUpstreamDialog = () => {
-    setUpstreamForm(emptyUpstreamForm)
-    setDialog({ type: 'create-upstream' })
-  }
+const openCreateUpstreamDialog = () => {
+  setEditingUpstream(null)
+  setUpstreamForm(emptyUpstreamForm)
+  setDialog({ type: 'create-upstream' })
+}
 
-  const closeDialog = () => {
-    setDialog(null)
-  }
+const openEditUpstreamDialog = (credential: UpstreamCredential) => {
+  setEditingUpstream(credential)
+  setUpstreamForm({
+    service: credential.service || credential.provider || '',
+    label: credential.name || credential.label || '',
+    plaintext: '',
+    endpoints: (credential.endpoints ?? []).join('\n'),
+  })
+  setDialog({ type: 'edit-upstream' })
+}
+
+const closeDialog = () => {
+  setDialog(null)
+  setEditingUpstream(null)
+  setUpstreamForm(emptyUpstreamForm)
+}
 
   const handleCreateUser = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -245,38 +276,59 @@ const UsersPage = () => {
     })
   }
 
-  const handleCreateUpstream = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveUpstream = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!selectedUserId) {
+    const isEdit = dialog?.type === 'edit-upstream'
+    const targetUserId = selectedUserId || editingUpstream?.user_id || null
+    if (!targetUserId) {
       return
     }
+    const service = upstreamForm.service.trim()
+    const label = upstreamForm.label.trim()
+    const plaintext = upstreamForm.plaintext.trim()
+    const endpoints = upstreamForm.endpoints
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+
+    const payload: Record<string, unknown> = {
+      provider: service,
+      service,
+      label,
+      name: label,
+      endpoints,
+    }
+
+    if (!isEdit || plaintext !== '') {
+      payload.plaintext = plaintext
+    }
+
     try {
-      const payload = {
-        provider: upstreamForm.provider,
-        label: upstreamForm.label,
-        plaintext: upstreamForm.plaintext,
-        endpoints: upstreamForm.endpoints
-          .split(/[\n,]/)
-          .map((item) => item.trim())
-          .filter(Boolean),
+      if (isEdit && editingUpstream) {
+        await apiClient.put<UpstreamCredential>(`/admin/upstreams/${editingUpstream.id}`, payload)
+        showSuccess('上游凭据已更新')
+      } else {
+        await apiClient.post<UpstreamCredential>(`/admin/users/${targetUserId}/upstreams`, payload)
+        showSuccess('上游凭据已创建')
       }
-      await apiClient.post<UpstreamCredential>(`/admin/users/${selectedUserId}/upstreams`, payload)
-      showSuccess('上游凭据已创建')
+      const reloadUserId = selectedUserId || editingUpstream?.user_id
       closeDialog()
-      await loadUserDetails(selectedUserId)
+      if (reloadUserId) {
+        await loadUserDetails(reloadUserId)
+      }
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         handleUnauthorized()
         return
       }
-      showError((err as Error).message ?? '创建上游凭据失败')
+      showError((err as Error).message ?? (isEdit ? '更新上游凭据失败' : '创建上游凭据失败'))
     }
   }
 
   const handleDeleteUpstream = (cred: UpstreamCredential) => {
     confirm({
       title: '删除上游凭据',
-      message: `确认删除上游 ${cred.provider} (${cred.label ?? '未命名'}) 吗？`,
+      message: `确认删除上游 ${getUpstreamService(cred)} (${getUpstreamLabel(cred)}) 吗？`,
       confirmText: '删除',
       onConfirm: async () => {
         try {
@@ -422,7 +474,7 @@ const UsersPage = () => {
                           <td>
                             {binding ? (
                               <span>
-                                {binding.upstream.provider} · {binding.upstream.label || binding.upstream.id}
+                                {getUpstreamService(binding.upstream)} · {getUpstreamLabel(binding.upstream)}
                               </span>
                             ) : upstreams.length === 0 ? (
                               <span style={{ color: '#64748b' }}>暂无上游</span>
@@ -441,7 +493,7 @@ const UsersPage = () => {
                                   <option value="">选择上游</option>
                                   {upstreams.map((upstream) => (
                                     <option key={upstream.id} value={upstream.id}>
-                                      {upstream.provider} · {upstream.label || upstream.id}
+                                      {getUpstreamService(upstream)} · {getUpstreamLabel(upstream)}
                                     </option>
                                   ))}
                                 </select>
@@ -493,8 +545,8 @@ const UsersPage = () => {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>服务商</th>
-                      <th>标签</th>
+                      <th>服务类型</th>
+                      <th>名称</th>
                       <th>可用地址</th>
                       <th style={{ width: 160 }}>操作</th>
                     </tr>
@@ -502,8 +554,8 @@ const UsersPage = () => {
                   <tbody>
                     {upstreams.map((upstream) => (
                       <tr key={upstream.id}>
-                        <td>{upstream.provider}</td>
-                        <td>{upstream.label || '-'}</td>
+                        <td>{getUpstreamService(upstream)}</td>
+                        <td>{getUpstreamLabel(upstream)}</td>
                         <td>
                           {upstream.endpoints && upstream.endpoints.length > 0 ? (
                             <ul style={{ margin: 0, paddingLeft: 20 }}>
@@ -517,6 +569,12 @@ const UsersPage = () => {
                         </td>
                         <td>
                           <div className="table-actions">
+                            <button
+                              className="button button--ghost"
+                              onClick={() => openEditUpstreamDialog(upstream)}
+                            >
+                              编辑
+                            </button>
                             <button
                               className="button button--ghost"
                               onClick={() => handleDeleteUpstream(upstream)}
@@ -606,71 +664,81 @@ const UsersPage = () => {
         </div>
       ) : null}
 
-      {dialog?.type === 'create-upstream' && selectedUser ? (
+      {dialog && (dialog.type === 'create-upstream' || dialog.type === 'edit-upstream') ? (
         <div className="dialog-backdrop" role="dialog" aria-modal>
-          <form className="dialog" onSubmit={handleCreateUpstream}>
-            <div className="dialog__header">
-              <h2 className="dialog__title">新建上游凭据</h2>
-              <button type="button" className="dialog__close" onClick={closeDialog}>
-                ×
-              </button>
-            </div>
-            <div className="field">
-              <span className="field__label">服务商</span>
-              <input
-                className="field__input"
-                value={upstreamForm.provider}
-                onChange={(event) =>
-                  setUpstreamForm((prev) => ({ ...prev, provider: event.target.value }))
-                }
-                placeholder="如 openai、anthropic"
-                required
-              />
-            </div>
-            <div className="field">
-              <span className="field__label">标签</span>
-              <input
-                className="field__input"
-                value={upstreamForm.label}
-                onChange={(event) =>
-                  setUpstreamForm((prev) => ({ ...prev, label: event.target.value }))
-                }
-                placeholder="用于标识环境或用途"
-              />
-            </div>
-            <div className="field">
-              <span className="field__label">上游 API Key</span>
-              <input
-                className="field__input"
-                value={upstreamForm.plaintext}
-                onChange={(event) =>
-                  setUpstreamForm((prev) => ({ ...prev, plaintext: event.target.value }))
-                }
-                placeholder="请粘贴上游服务商提供的 API Key"
-                required
-              />
-            </div>
-            <div className="field">
-              <span className="field__label">可用地址</span>
-              <textarea
-                className="field__textarea"
-                rows={3}
-                value={upstreamForm.endpoints}
-                onChange={(event) =>
-                  setUpstreamForm((prev) => ({ ...prev, endpoints: event.target.value }))
-                }
-                placeholder="每行一个地址，例如 https://api.openai.com/v1"
-              />
-            </div>
-            <div className="dialog__actions">
-              <button type="button" className="button button--ghost" onClick={closeDialog}>
-                取消
-              </button>
-              <button className="button" type="submit">
-                保存
-              </button>
-            </div>
-          </form>
+          {(() => {
+            const isEdit = dialog.type === 'edit-upstream'
+            const title = isEdit ? '编辑上游凭据' : '新建上游凭据'
+            const secretPlaceholder = isEdit
+              ? '留空则沿用当前密钥'
+              : '请粘贴上游服务提供的 API Key'
+            const submitText = isEdit ? '更新' : '保存'
+            return (
+              <form className="dialog" onSubmit={handleSaveUpstream}>
+                <div className="dialog__header">
+                  <h2 className="dialog__title">{title}</h2>
+                  <button type="button" className="dialog__close" onClick={closeDialog}>
+                    ×
+                  </button>
+                </div>
+                <div className="field">
+                  <span className="field__label">服务类型</span>
+                  <input
+                    className="field__input"
+                    value={upstreamForm.service}
+                    onChange={(event) =>
+                      setUpstreamForm((prev) => ({ ...prev, service: event.target.value }))
+                    }
+                    placeholder="如 openai、anthropic"
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <span className="field__label">名称</span>
+                  <input
+                    className="field__input"
+                    value={upstreamForm.label}
+                    onChange={(event) =>
+                      setUpstreamForm((prev) => ({ ...prev, label: event.target.value }))
+                    }
+                    placeholder="用于标识环境或用途"
+                  />
+                </div>
+                <div className="field">
+                  <span className="field__label">上游 API Key</span>
+                  <input
+                    className="field__input"
+                    value={upstreamForm.plaintext}
+                    onChange={(event) =>
+                      setUpstreamForm((prev) => ({ ...prev, plaintext: event.target.value }))
+                    }
+                    placeholder={secretPlaceholder}
+                    required={!isEdit}
+                  />
+                </div>
+                <div className="field">
+                  <span className="field__label">可用地址</span>
+                  <textarea
+                    className="field__textarea"
+                    rows={3}
+                    value={upstreamForm.endpoints}
+                    onChange={(event) =>
+                      setUpstreamForm((prev) => ({ ...prev, endpoints: event.target.value }))
+                    }
+                    placeholder="每行一个地址，例如 https://api.openai.com/v1"
+                  />
+                </div>
+                <div className="dialog__actions">
+                  <button type="button" className="button button--ghost" onClick={closeDialog}>
+                    取消
+                  </button>
+                  <button className="button" type="submit">
+                    {submitText}
+                  </button>
+                </div>
+              </form>
+            )
+          })()}
         </div>
       ) : null}
     </div>

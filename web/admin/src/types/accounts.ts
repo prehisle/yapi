@@ -34,7 +34,10 @@ export type UpstreamCredential = {
   id: string
   user_id: string
   provider: string
+  service?: string
   label?: string
+  name?: string
+  enabled?: boolean
   endpoints?: string[]
   metadata?: Record<string, unknown>
   created_at: string

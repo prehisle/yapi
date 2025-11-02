@@ -29,6 +29,7 @@ type serviceStub struct {
 	listAPIKeysFn    func(ctx context.Context, userID string) ([]accounts.APIKey, error)
 	revokeAPIKeyFn   func(ctx context.Context, apiKeyID string) error
 	createUpstreamFn func(ctx context.Context, params accounts.CreateUpstreamCredentialParams) (accounts.UpstreamCredential, error)
+	updateUpstreamFn func(ctx context.Context, params accounts.UpdateUpstreamCredentialParams) (accounts.UpstreamCredential, error)
 	listUpstreamFn   func(ctx context.Context, userID string) ([]accounts.UpstreamCredential, error)
 	deleteUpstreamFn func(ctx context.Context, credentialID string) error
 	bindAPIKeyFn     func(ctx context.Context, params accounts.BindAPIKeyParams) (accounts.UserAPIKeyBinding, error)
@@ -105,6 +106,13 @@ func (s *serviceStub) RevokeUserAPIKey(ctx context.Context, apiKeyID string) err
 func (s *serviceStub) CreateUpstreamCredential(ctx context.Context, params accounts.CreateUpstreamCredentialParams) (accounts.UpstreamCredential, error) {
 	if s.createUpstreamFn != nil {
 		return s.createUpstreamFn(ctx, params)
+	}
+	return accounts.UpstreamCredential{}, ErrAccountsUnavailable
+}
+
+func (s *serviceStub) UpdateUpstreamCredential(ctx context.Context, params accounts.UpdateUpstreamCredentialParams) (accounts.UpstreamCredential, error) {
+	if s.updateUpstreamFn != nil {
+		return s.updateUpstreamFn(ctx, params)
 	}
 	return accounts.UpstreamCredential{}, ErrAccountsUnavailable
 }
@@ -562,8 +570,9 @@ func TestHandler_CreateUpstreamCredential_Success(t *testing.T) {
 			return accounts.UpstreamCredential{
 				ID:        "cred-1",
 				UserID:    params.UserID,
-				Provider:  params.Provider,
-				Label:     params.Label,
+				Service:   "mock-provider",
+				Name:      "primary",
+				APIKey:    params.Plaintext,
 				Endpoints: datatypes.JSON([]byte(`["https://chat.example.com"]`)),
 				Metadata:  datatypes.JSONMap{"env": "prod"},
 				CreatedAt: now,
@@ -590,8 +599,66 @@ func TestHandler_CreateUpstreamCredential_Success(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Equal(t, "cred-1", resp.ID)
 	require.Equal(t, "mock-provider", resp.Provider)
+	require.Equal(t, "mock-provider", resp.Service)
 	require.Equal(t, []string{"https://chat.example.com"}, resp.Endpoints)
 	require.Equal(t, "prod", resp.Metadata["env"])
+}
+
+func TestHandler_UpdateUpstreamCredential_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	updated := accounts.UpstreamCredential{
+		ID:        "cred-1",
+		UserID:    "user-1",
+		Service:   "anthropic",
+		Name:      "staging",
+		APIKey:    "secret-new",
+		Endpoints: datatypes.JSON([]byte(`["https://api.anthropic.com"]`)),
+		Metadata:  datatypes.JSONMap{"env": "staging"},
+		CreatedAt: time.Date(2025, time.November, 2, 14, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2025, time.November, 2, 18, 0, 0, 0, time.UTC),
+	}
+	svc := &serviceStub{
+		updateUpstreamFn: func(ctx context.Context, params accounts.UpdateUpstreamCredentialParams) (accounts.UpstreamCredential, error) {
+			require.Equal(t, "cred-1", params.CredentialID)
+			require.Equal(t, "anthropic", params.Provider)
+			require.Equal(t, "chat", params.Service)
+			require.Equal(t, "staging", params.Label)
+			require.Equal(t, "staging", params.Name)
+			require.NotNil(t, params.Plaintext)
+			require.Equal(t, "secret-new", *params.Plaintext)
+			require.ElementsMatch(t, []string{"https://api.anthropic.com"}, params.Endpoints)
+			require.NotNil(t, params.Enabled)
+			require.False(t, *params.Enabled)
+			return updated, nil
+		},
+	}
+	router := newTestRouter(svc)
+
+	body := bytes.NewBufferString(`{
+		"provider":"anthropic",
+		"service":"chat",
+		"label":"staging",
+		"name":"staging",
+		"plaintext":"secret-new",
+		"endpoints":["https://api.anthropic.com"],
+		"enabled":false,
+		"metadata":{"env":"staging"}
+	}`)
+	req := httptest.NewRequest(http.MethodPut, "/admin/upstreams/cred-1", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp upstreamCredentialResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, "cred-1", resp.ID)
+	require.Equal(t, "anthropic", resp.Provider)
+	require.Equal(t, "chat", resp.Service)
+	require.Equal(t, "staging", resp.Label)
+	require.Equal(t, "staging", resp.Name)
+	require.Equal(t, []string{"https://api.anthropic.com"}, resp.Endpoints)
+	require.Equal(t, "staging", resp.Metadata["env"])
 }
 
 func TestHandler_ListUpstreamCredentials_Success(t *testing.T) {
@@ -604,8 +671,9 @@ func TestHandler_ListUpstreamCredentials_Success(t *testing.T) {
 				{
 					ID:        "cred-1",
 					UserID:    userID,
-					Provider:  "mock-provider",
-					Label:     "primary",
+					Service:   "mock-provider",
+					Name:      "primary",
+					APIKey:    "secret",
 					Endpoints: datatypes.JSON([]byte(`["https://chat.example.com","https://backup.example.com"]`)),
 					Metadata:  datatypes.JSONMap{"env": "prod"},
 					CreatedAt: now,
@@ -626,6 +694,10 @@ func TestHandler_ListUpstreamCredentials_Success(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Len(t, resp.Items, 1)
+	require.Equal(t, "mock-provider", resp.Items[0].Provider)
+	require.Equal(t, "mock-provider", resp.Items[0].Service)
+	require.Equal(t, "primary", resp.Items[0].Label)
+	require.Equal(t, "primary", resp.Items[0].Name)
 	require.ElementsMatch(t, []string{"https://chat.example.com", "https://backup.example.com"}, resp.Items[0].Endpoints)
 	require.Equal(t, "prod", resp.Items[0].Metadata["env"])
 }
@@ -654,10 +726,10 @@ func TestHandler_BindAPIKey_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	now := time.Date(2025, time.November, 2, 16, 0, 0, 0, time.UTC)
 	binding := accounts.UserAPIKeyBinding{
-		ID:                   "binding-1",
-		UserID:               "user-1",
-		UserAPIKeyID:         "key-1",
-		UpstreamCredentialID: "cred-1",
+		ID:             "binding-1",
+		UserID:         "user-1",
+		UserAPIKeyID:   "key-1",
+		UpstreamKeyID:  "cred-1",
 		Metadata:             datatypes.JSONMap{"strategy": "primary"},
 		CreatedAt:            now,
 		UpdatedAt:            now,
@@ -665,8 +737,9 @@ func TestHandler_BindAPIKey_Success(t *testing.T) {
 	upstream := accounts.UpstreamCredential{
 		ID:        "cred-1",
 		UserID:    "user-1",
-		Provider:  "mock-provider",
-		Label:     "primary",
+		Service:   "mock-provider",
+		Name:      "primary",
+		APIKey:    "secret",
 		Endpoints: datatypes.JSON([]byte(`["https://chat.example.com"]`)),
 		Metadata:  datatypes.JSONMap{"env": "prod"},
 		CreatedAt: now,
@@ -698,7 +771,9 @@ func TestHandler_BindAPIKey_Success(t *testing.T) {
 	require.Equal(t, "binding-1", resp.ID)
 	require.Equal(t, "cred-1", resp.UpstreamCredentialID)
 	require.Equal(t, "mock-provider", resp.Upstream.Provider)
+	require.Equal(t, "mock-provider", resp.Upstream.Service)
 	require.Equal(t, "primary", resp.Upstream.Label)
+	require.Equal(t, "primary", resp.Upstream.Name)
 	require.Equal(t, "primary", resp.Metadata["strategy"])
 }
 
@@ -706,10 +781,10 @@ func TestHandler_GetAPIKeyBinding_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	now := time.Date(2025, time.November, 2, 17, 0, 0, 0, time.UTC)
 	binding := accounts.UserAPIKeyBinding{
-		ID:                   "binding-1",
-		UserID:               "user-1",
-		UserAPIKeyID:         "key-1",
-		UpstreamCredentialID: "cred-1",
+		ID:             "binding-1",
+		UserID:         "user-1",
+		UserAPIKeyID:   "key-1",
+		UpstreamKeyID:  "cred-1",
 		Metadata:             datatypes.JSONMap{"strategy": "primary"},
 		CreatedAt:            now,
 		UpdatedAt:            now,
@@ -717,8 +792,9 @@ func TestHandler_GetAPIKeyBinding_Success(t *testing.T) {
 	upstream := accounts.UpstreamCredential{
 		ID:        "cred-1",
 		UserID:    "user-1",
-		Provider:  "mock-provider",
-		Label:     "primary",
+		Service:   "mock-provider",
+		Name:      "primary",
+		APIKey:    "secret",
 		Endpoints: datatypes.JSON([]byte(`["https://chat.example.com"]`)),
 		Metadata:  datatypes.JSONMap{"env": "prod"},
 		CreatedAt: now,
@@ -740,6 +816,10 @@ func TestHandler_GetAPIKeyBinding_Success(t *testing.T) {
 	var resp apiKeyBindingResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Equal(t, "binding-1", resp.ID)
+	require.Equal(t, "mock-provider", resp.Upstream.Provider)
+	require.Equal(t, "mock-provider", resp.Upstream.Service)
+	require.Equal(t, "primary", resp.Upstream.Label)
+	require.Equal(t, "primary", resp.Upstream.Name)
 	require.Equal(t, []string{"https://chat.example.com"}, resp.Upstream.Endpoints)
 	require.Equal(t, "prod", resp.Upstream.Metadata["env"])
 }

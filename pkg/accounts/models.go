@@ -114,15 +114,15 @@ func (k UpstreamKey) Validate() error {
 
 // UserKeyBinding maps a user API key to upstream keys per service.
 type UserKeyBinding struct {
-	ID              string            `gorm:"type:char(36);primaryKey"`
-	UserID          string            `gorm:"type:char(36);index"`
-	UserAPIKeyID    string            `gorm:"type:char(36);index;uniqueIndex:user_key_service"`
-	UpstreamKeyID   string            `gorm:"type:char(36);index;column:upstream_credential_id"`
-	Service         string            `gorm:"type:varchar(64);index;uniqueIndex:user_key_service"`
-	Position        int               `gorm:"type:int;default:0"`
-	Metadata        datatypes.JSONMap `gorm:"type:jsonb"`
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID            string            `gorm:"type:char(36);primaryKey"`
+	UserID        string            `gorm:"type:char(36);index"`
+	UserAPIKeyID  string            `gorm:"type:char(36);index;uniqueIndex:user_key_service"`
+	UpstreamKeyID string            `gorm:"type:char(36);index;column:upstream_credential_id"`
+	Service       string            `gorm:"type:varchar(64);index;uniqueIndex:user_key_service"`
+	Position      int               `gorm:"type:int;default:0"`
+	Metadata      datatypes.JSONMap `gorm:"type:jsonb"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // TableName retains the legacy table name.
@@ -146,3 +146,7 @@ func (b UserKeyBinding) Validate() error {
 	}
 	return nil
 }
+
+// Temporary aliases to ease migration from legacy naming.
+type UpstreamCredential = UpstreamKey
+type UserAPIKeyBinding = UserKeyBinding
